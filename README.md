@@ -6,9 +6,8 @@ The IS briefing is intentionally concise. Each paper includes authors, date, lin
 
 The IS briefing separates papers into:
 
-- Latest IS papers from IS journals and conferences, with field labels such as modeling, design, behavioral, platform, or AI/ML.
+- Latest IS papers from core IS journals, with field labels such as `Design Science`, `Modeling`, `Behavioral`, `Empirical`, or `General IS`.
 - Recent high-value DSR + AI/ML papers from the last three years, prioritizing ISR, MISQ, and Management Science, then POM, JMIS, JOC, JAIS, DSS, I&M, EJIS, and ISJ.
-- Recent IS conference DSR + AI/ML papers from the last three months for broader ideation.
 - Highlight summary after all search modules.
 
 The `Field` label is a single coarse type such as `Design Science`, `Modeling`, `Behavioral`, `Empirical`, or `General IS`. Keywords are split into method/background signals.

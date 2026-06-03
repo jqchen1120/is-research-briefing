@@ -33,16 +33,6 @@ SECOND_TIER_JOURNALS = [
     "Information Systems Journal",
 ]
 
-IS_CONFERENCES = [
-    "International Conference on Information Systems",
-    "European Conference on Information Systems",
-    "Pacific Asia Conference on Information Systems",
-    "Hawaii International Conference on System Sciences",
-    "Americas Conference on Information Systems",
-    "Conference on Information Systems and Technology",
-    "Workshop on Information Systems and Economics",
-]
-
 DAILY_IS_QUERIES = [
     "MIS Quarterly",
     "Information Systems Research",
@@ -60,13 +50,6 @@ DSR_AI_QUERIES = [
     "machine learning decision support information systems",
     "generative AI artifact information systems",
     "algorithmic decision support design science information systems",
-]
-
-DSR_AI_CONFERENCE_QUERIES = [
-    "ICIS artificial intelligence design science",
-    "ECIS machine learning decision support",
-    "PACIS generative AI information systems",
-    "HICSS AI decision support information systems",
 ]
 
 AI_ML_TERMS = [
@@ -111,23 +94,6 @@ STRICT_DSR_TERMS = [
     "design evaluation",
     "build and evaluate",
     "instantiation",
-]
-
-IS_CONFERENCE_MARKERS = [
-    "international conference on information systems",
-    "european conference on information systems",
-    "pacific asia conference on information systems",
-    "hawaii international conference on system sciences",
-    "americas conference on information systems",
-    "conference on information systems and technology",
-    "workshop on information systems and economics",
-    "icis",
-    "ecis",
-    "pacis",
-    "hicss",
-    "amcis",
-    "cist",
-    "wise",
 ]
 
 BEHAVIORAL_TERMS = [
@@ -323,43 +289,11 @@ def search_recent_high_value_dsr_ai() -> list[Paper]:
     return preferred or candidates
 
 
-def search_recent_conference_dsr_ai() -> list[Paper]:
-    papers: list[Paper] = []
-    for query in DSR_AI_CONFERENCE_QUERIES:
-        papers.extend(
-            search_openalex(
-                query,
-                cutoff(90),
-                sort="publication_date:desc",
-                per_page=8,
-                module_hint="Recent IS conference DSR + AI/ML",
-            )
-        )
-    candidates = [paper for paper in dedupe(papers) if is_ai_or_dsr_related(paper) and is_is_related(paper)]
-    conference = [paper for paper in candidates if is_conference_like(paper)]
-    if conference:
-        return conference
-
-    fallback: list[Paper] = []
-    for query in DSR_AI_CONFERENCE_QUERIES:
-        fallback.extend(
-            search_openalex(
-                query,
-                cutoff(365),
-                sort="publication_date:desc",
-                per_page=6,
-                module_hint="Recent IS conference DSR + AI/ML",
-            )
-        )
-    fallback_candidates = [paper for paper in dedupe(fallback) if is_ai_or_dsr_related(paper) and is_is_related(paper)]
-    return [paper for paper in fallback_candidates if is_conference_like(paper)]
-
-
 def filter_relevant_is(papers: list[Paper]) -> list[Paper]:
     filtered = []
     for paper in papers:
         text = paper_text(paper)
-        if venue_priority(paper.venue) > 0 or is_conference_like(paper) or "information systems" in text:
+        if venue_priority(paper.venue) > 0 or "information systems" in text:
             filtered.append(paper)
     return filtered
 
@@ -394,7 +328,6 @@ def is_is_related(paper: Paper) -> bool:
         or "mis quarterly" in paper.venue.lower()
         or "information systems research" in paper.venue.lower()
         or "journal of management information systems" in paper.venue.lower()
-        or any(marker in text for marker in IS_CONFERENCE_MARKERS)
     )
 
 
@@ -404,14 +337,7 @@ def venue_priority(venue: str) -> int:
         return 4
     if any(name.lower() in lowered for name in SECOND_TIER_JOURNALS):
         return 3
-    if any(name.lower() in lowered for name in IS_CONFERENCES):
-        return 2
     return 0
-
-
-def is_conference_like(paper: Paper) -> bool:
-    text = f"{paper.venue} {paper.title}".lower()
-    return any(marker in text for marker in IS_CONFERENCE_MARKERS)
 
 
 def classify_domain(paper: Paper) -> str:
@@ -551,12 +477,10 @@ def build_markdown() -> str:
     now = datetime.now(timezone(timedelta(hours=8)))
     latest = sorted(search_daily_is(), key=score_daily, reverse=True)[:10]
     high_value = sorted(search_recent_high_value_dsr_ai(), key=score_dsr_ai, reverse=True)[:8]
-    conferences = sorted(search_recent_conference_dsr_ai(), key=score_dsr_ai, reverse=True)[:10]
 
     sections = {
         "Latest IS papers": latest,
         "Recent high-value DSR + AI/ML papers": high_value,
-        "Recent IS conference DSR + AI/ML papers": conferences,
     }
 
     lines = [
@@ -576,13 +500,6 @@ def build_markdown() -> str:
             lines.extend(paper_block(paper, include_citations=True))
     else:
         lines.extend(["No strong matches found today.", ""])
-
-    lines.extend(["## 3. Recent IS Conference DSR + AI/ML Papers", ""])
-    if conferences:
-        for paper in conferences:
-            lines.extend(paper_block(paper, include_citations=True))
-    else:
-        lines.extend(["No strong conference matches found in the last three months.", ""])
 
     lines.extend(["## Highlight Summary", ""])
     lines.extend(highlight_summary(sections))
