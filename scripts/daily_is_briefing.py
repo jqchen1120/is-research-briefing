@@ -376,7 +376,7 @@ def keywords(paper: Paper) -> list[str]:
     return tags[:6] or ["Information Systems"]
 
 
-def abstract_short(paper: Paper, limit: int = 320) -> str:
+def abstract_short(paper: Paper, limit: int = 650) -> str:
     abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
     if not abstract:
         return "No abstract in metadata."
@@ -385,32 +385,27 @@ def abstract_short(paper: Paper, limit: int = 320) -> str:
     return abstract[:limit].rsplit(" ", 1)[0] + "..."
 
 
-def novelty(paper: Paper) -> str:
+def method_summary(paper: Paper) -> str:
     text = paper_text(paper)
     if "action design research" in text:
-        return "Action-design study linking artifact building with real organizational use."
+        return "Uses action design research: builds an artifact in an organizational setting, iterates with stakeholders, and evaluates the artifact through use."
     if "generative ai" in text or "large language model" in text:
-        return "Applies GenAI/LLM capability to an IS artifact, workflow, or decision setting."
+        return "Designs or evaluates a GenAI/LLM-enabled artifact, workflow, or decision-support process in an IS context."
     if "machine learning" in text or "deep learning" in text:
-        return "Uses ML/DL to solve an applied organizational or decision problem."
+        return "Uses ML/DL methods to model, predict, classify, recommend, or support decisions for an applied organizational problem."
     if "design principle" in text or "design theory" in text:
-        return "Attempts to extract reusable design knowledge rather than only report effects."
+        return "Derives design principles or design-theory components from artifact development, evaluation evidence, or prior theory."
+    if "survey" in text:
+        return "Uses survey evidence to model perceptions, adoption, behavior, or organizational outcomes related to IS use."
+    if "interview" in text or "case study" in text:
+        return "Uses qualitative field evidence such as interviews or case analysis to explain how the IS phenomenon unfolds in context."
+    if "experiment" in text:
+        return "Uses experimental or quasi-experimental evidence to estimate effects of a digital intervention, artifact, or information treatment."
+    if "regression" in text or "panel data" in text or "econometric" in text:
+        return "Uses empirical modeling, likely regression or panel-data analysis, to estimate relationships or effects in an IS setting."
     if "platform" in text:
-        return "Connects digital platform design/governance to IS outcomes."
-    return "Potentially useful IS contribution; verify novelty from full text."
-
-
-def limitation(paper: Paper) -> str:
-    text = paper_text(paper)
-    if "survey" in text or "interview" in text:
-        return "Likely context- and sample-dependent; check external validity."
-    if "case study" in text or "action design" in text:
-        return "Likely strong context fit but limited generalizability; check evaluation depth."
-    if "model" in text or "algorithm" in text or "machine learning" in text:
-        return "Check data scope, baseline choice, deployment realism, and robustness."
-    if not paper.abstract:
-        return "Metadata is thin; full text needed before judging contribution."
-    return "Full-text reading needed for causal claims, evaluation strength, and boundary conditions."
+        return "Analyzes or designs platform mechanisms such as governance, matching, participation, or ecosystem coordination."
+    return "Studies an IS phenomenon using the article's reported empirical, analytical, or design approach; the abstract metadata gives the main setup."
 
 
 def score_daily(paper: Paper) -> int:
@@ -456,8 +451,7 @@ def paper_block(paper: Paper, include_domain: bool = False, include_citations: b
         [
             f"- Abstract: {abstract_short(paper)}",
             f"- Keywords: {', '.join(keywords(paper))}",
-            f"- Novelty / highlight: {novelty(paper)}",
-            f"- Limitation: {limitation(paper)}",
+            f"- Method: {method_summary(paper)}",
             "",
         ]
     )

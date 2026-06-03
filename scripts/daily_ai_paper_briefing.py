@@ -349,7 +349,7 @@ def keywords(paper: Paper) -> list[str]:
     return tags[:6] or ["AI"]
 
 
-def abstract_short(paper: Paper, limit: int = 300) -> str:
+def abstract_short(paper: Paper, limit: int = 650) -> str:
     abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
     if not abstract:
         return "No abstract in metadata."
@@ -358,34 +358,27 @@ def abstract_short(paper: Paper, limit: int = 300) -> str:
     return abstract[:limit].rsplit(" ", 1)[0] + "..."
 
 
-def novelty(paper: Paper) -> str:
+def method_summary(paper: Paper) -> str:
     text = text_of(paper)
     if "small language model" in text or "distillation" in text or "quantization" in text:
-        return "Efficiency angle: smaller/cheaper models, compression, or deployment constraints."
+        return "Develops or evaluates efficient-model methods such as distillation, quantization, compression, or small-model deployment."
     if "agent" in text or "tool use" in text:
-        return "Agentic angle: planning, tool orchestration, autonomy, or reliability."
+        return "Builds or evaluates agentic workflows involving planning, tool use, multi-step reasoning, autonomy, or reliability mechanisms."
     if "multimodal" in text or "vision-language" in text:
-        return "Multimodal angle: richer input/output and evaluation beyond text-only tasks."
+        return "Uses multimodal modeling, usually combining vision/language/video inputs, to improve understanding, generation, or reasoning."
     if "retrieval" in text or "rag" in text:
-        return "Knowledge angle: retrieval, memory, provenance, or grounded generation."
+        return "Uses retrieval, memory, or external knowledge mechanisms to ground model outputs or improve factual/task performance."
     if "alignment" in text or "safety" in text or "evaluation" in text:
-        return "Trust angle: evaluation, safety, red-teaming, or alignment methodology."
+        return "Designs evaluation, alignment, reward-modeling, red-teaming, or safety methods for measuring and improving model behavior."
+    if "reinforcement learning" in text or "rlhf" in text:
+        return "Uses reinforcement learning or preference-optimization methods to improve policies, agents, or model behavior."
+    if "benchmark" in text or "dataset" in text:
+        return "Introduces or uses a benchmark/dataset to evaluate model capability, robustness, or task performance."
     if "graph" in text:
-        return "Relational structure angle: graph representation or message passing."
-    return "Capability or benchmark that may translate into a new research topic."
-
-
-def limitation(paper: Paper, fresh: bool = False) -> str:
-    text = text_of(paper)
-    if fresh:
-        return "Fresh arXiv; quality depends on author/lab signal and full-paper validation."
-    if "benchmark" in text or "evaluation" in text:
-        return "Check benchmark coverage, contamination risk, and practical relevance."
-    if "agent" in text:
-        return "Check reliability, cost, reproducibility, and failure recovery."
-    if "large language model" in text:
-        return "Check compute assumptions, data leakage, and whether gains generalize."
-    return "Check full text for evidence strength, baselines, and reproducibility."
+        return "Uses graph representation learning, message passing, or graph-based modeling to capture relational structure."
+    if "large language model" in text or "foundation model" in text:
+        return "Trains, adapts, evaluates, or analyzes foundation models/LLMs for a specific capability or task setting."
+    return "Studies an AI method, benchmark, or system using the approach described in the title and abstract metadata."
 
 
 def score_fresh(paper: Paper) -> int:
@@ -428,8 +421,7 @@ def paper_block(paper: Paper, fresh: bool = False, include_citations: bool = Tru
         [
             f"- Abstract: {abstract_short(paper)}",
             f"- Keywords: {', '.join(keywords(paper))}",
-            f"- Novelty / highlight: {novelty(paper)}",
-            f"- Limitation: {limitation(paper, fresh=fresh)}",
+            f"- Method: {method_summary(paper)}",
             f"- Quality signal: {quality_signal(paper, fresh=fresh)}",
             "",
         ]
