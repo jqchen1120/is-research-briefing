@@ -44,9 +44,17 @@ IS_CONFERENCES = [
 ]
 
 DAILY_IS_QUERIES = [
-    *FIRST_TIER_JOURNALS,
-    *SECOND_TIER_JOURNALS,
-    *IS_CONFERENCES,
+    "MIS Quarterly",
+    "Information Systems Research",
+    "Management Science information systems",
+    "Journal of Management Information Systems",
+    "Journal of the Association for Information Systems",
+    "Decision Support Systems information systems",
+    "Information & Management information systems",
+    "International Conference on Information Systems",
+    "European Conference on Information Systems",
+    "Pacific Asia Conference on Information Systems",
+    "Hawaii International Conference on System Sciences information systems",
     "information systems digital transformation",
     "information systems artificial intelligence",
     "information systems platform",
@@ -163,7 +171,7 @@ def is_future_date(value: str) -> bool:
     return bool(value and value[:10] > today_utc())
 
 
-def fetch_json(url: str, timeout: int = 30) -> dict:
+def fetch_json(url: str, timeout: int = 12) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/2.0"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -241,8 +249,14 @@ def search_openalex(
 def search_daily_is() -> list[Paper]:
     papers: list[Paper] = []
     for query in DAILY_IS_QUERIES:
-        papers.extend(search_openalex(query, cutoff(21), per_page=6, module_hint="Latest IS papers"))
-    return filter_relevant_is(dedupe(papers))
+        papers.extend(search_openalex(query, cutoff(365), per_page=5, module_hint="Latest IS papers"))
+    candidates = dedupe(papers)
+    filtered = filter_relevant_is(candidates)
+    if filtered:
+        return filtered
+    if candidates:
+        return candidates
+    return search_openalex("information systems", cutoff(730), per_page=15, module_hint="Latest IS papers")
 
 
 def search_recent_high_value_dsr_ai() -> list[Paper]:
