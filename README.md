@@ -2,14 +2,14 @@
 
 This GitHub Actions workflow sends a daily Information Systems research briefing at 10:00 Asia/Shanghai.
 
-The briefing prioritizes Design Science Research and separates papers into:
+The IS briefing is intentionally concise. Each paper includes authors, date, link, abstract, keywords, novelty/highlight, and limitation.
 
-- Design Science Research
-- Adjacent Empirical IS
-- Behavioral / Organizational IS
-- Other Relevant IS
-- Recent High-Value DSR Reading
-- Emerging Opportunities for DSR
+The IS briefing separates papers into:
+
+- Latest IS papers from IS journals and conferences, with field labels such as modeling, design, behavioral, platform, or AI/ML.
+- Recent high-value DSR + AI/ML papers from the last three years, prioritizing ISR, MISQ, and Management Science, then POM, JMIS, JOC, JAIS, DSS, I&M, EJIS, and ISJ.
+- Recent IS conference DSR + AI/ML papers from the last three months for broader ideation.
+- Highlight summary after all search modules.
 
 ## Setup
 
@@ -44,18 +44,12 @@ You can also run it manually from `Actions -> Daily IS Design Science Briefing -
 
 ## AI Paper Inspiration Briefing
 
-The second workflow sends a broader AI paper briefing at 10:30 Asia/Shanghai. It mixes:
+The second workflow sends a broader AI paper briefing at 10:30 Asia/Shanghai. Each paper includes authors, date, link, abstract, keywords, novelty/highlight, limitation, and a quality signal. It mixes:
 
-- Fresh arXiv papers
-- Trending or highly cited recent AI papers
-- Papers from notable authors and labs
-- Large models and foundation models
-- Small models and efficient AI
-- Agents, tool use, and reasoning
-- Multimodal and vision-language models
-- RAG, memory, and knowledge systems
-- Alignment, safety, and evaluation
-- AI for science, code, and robotics
+- Fresh arXiv papers, selected by topic relevance plus notable author/lab/company signals.
+- Trending recent AI papers and topics, using citation signal where available.
+- Notable author/lab papers.
+- A rotating daily series such as GNN, RL, LLM, RAG, Agents, Multimodal, Efficient Models, or Alignment/Evaluation. This section requires citation signal and mixes classic and frontier must-reads.
 
 ## Notes
 
@@ -65,6 +59,4 @@ The script uses public metadata APIs and standard-library Python only:
 - arXiv
 - Crossref
 
-The result quality depends on source metadata freshness. For a production-grade version, add Semantic Scholar, SSRN, stateful deduplication, and a better LLM-based ranking step.
-
-The high-value reading section recommends recent but not brand-new DSR-related papers, usually from 2018 onward and excluding the newest 60 days. It prioritizes design science, artifacts, design principles, human-AI collaboration, generative AI systems, platforms, decision support, health IT, and security/privacy tools. Older foundational classics are intentionally not the default recommendations.
+The result quality depends on source metadata freshness. For a production-grade version, add Semantic Scholar, SSRN, stateful deduplication, and an LLM-based ranking step.

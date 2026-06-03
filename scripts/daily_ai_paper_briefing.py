@@ -17,73 +17,30 @@ from email.message import EmailMessage
 from typing import Iterable
 
 
-TOPIC_QUERIES = {
-    "Large Models / Foundation Models": [
-        "large language models reasoning",
-        "foundation models training post-training",
-        "mixture of experts large language model",
-        "long context large language models",
-    ],
-    "Small Models / Efficient AI": [
-        "small language models efficient reasoning",
-        "model compression distillation quantization",
-        "parameter efficient fine tuning language models",
-        "on device language model efficient inference",
-    ],
-    "Agents / Tool Use / Reasoning": [
-        "language model agents tool use planning",
-        "LLM agents reasoning evaluation",
-        "agentic workflows large language models",
-        "test time compute reasoning language models",
-    ],
-    "Multimodal / Vision-Language": [
-        "multimodal large language models",
-        "vision language model reasoning",
-        "video language model understanding",
-        "image generation diffusion transformer",
-    ],
-    "RAG / Memory / Knowledge": [
-        "retrieval augmented generation evaluation",
-        "long term memory language model agents",
-        "knowledge editing large language models",
-        "semantic retrieval language models",
-    ],
-    "Alignment / Safety / Evaluation": [
-        "large language model alignment safety evaluation",
-        "red teaming large language models",
-        "AI evaluation benchmark reasoning",
-        "reward models preference optimization",
-    ],
-    "AI for Science / Code / Robotics": [
-        "AI for science foundation models",
-        "code generation large language models",
-        "robotics foundation models vision language action",
-        "scientific discovery language models",
-    ],
-}
-
-AUTHOR_QUERIES = [
-    "Yoshua Bengio AI",
-    "Yann LeCun AI",
-    "Geoffrey Hinton AI",
-    "Ilya Sutskever AI",
-    "Fei-Fei Li AI",
-    "Pieter Abbeel AI",
-    "Percy Liang language models",
-    "Dawn Song AI security",
-    "Chelsea Finn robotics learning",
-    "Andrej Karpathy language models",
-    "Christopher Manning language models",
-    "Diyi Yang language models",
-    "Danqi Chen retrieval language models",
-    "Tatsunori Hashimoto language models",
-    "Jacob Steinhardt AI alignment",
+NOTABLE_AUTHORS = [
+    "Yoshua Bengio",
+    "Yann LeCun",
+    "Geoffrey Hinton",
+    "Ilya Sutskever",
+    "Fei-Fei Li",
+    "Percy Liang",
+    "Dawn Song",
+    "Pieter Abbeel",
+    "Chelsea Finn",
+    "Christopher Manning",
+    "Danqi Chen",
+    "Diyi Yang",
+    "Tatsunori Hashimoto",
+    "Jacob Steinhardt",
+    "Sergey Levine",
+    "Pieter Abbeel",
 ]
 
-ORG_TERMS = [
+NOTABLE_LABS = [
     "OpenAI",
     "DeepMind",
     "Google Research",
+    "Google DeepMind",
     "Anthropic",
     "Meta AI",
     "Microsoft Research",
@@ -93,9 +50,64 @@ ORG_TERMS = [
     "MIT",
     "Berkeley",
     "CMU",
+    "Princeton",
     "Tsinghua",
     "Peking University",
     "Shanghai AI Lab",
+]
+
+FRESH_ARXIV_QUERIES = [
+    'cat:cs.AI OR cat:cs.CL OR cat:cs.LG OR cat:cs.CV',
+    'all:"large language model" OR all:"LLM" OR all:"foundation model"',
+    'all:"agent" OR all:"tool use" OR all:"reasoning"',
+    'all:"multimodal" OR all:"vision-language"',
+    'all:"small language model" OR all:"distillation" OR all:"quantization"',
+]
+
+TRENDING_QUERIES = [
+    "large language models reasoning",
+    "language model agents tool use",
+    "multimodal foundation models",
+    "small language models efficient inference",
+    "retrieval augmented generation evaluation",
+    "AI alignment safety evaluation",
+    "AI for science foundation models",
+    "robotics vision language action model",
+]
+
+SERIES = [
+    {
+        "name": "GNN",
+        "queries": ["graph neural networks", "graph representation learning", "graph foundation models"],
+    },
+    {
+        "name": "RL",
+        "queries": ["reinforcement learning", "offline reinforcement learning", "reinforcement learning from human feedback"],
+    },
+    {
+        "name": "LLM",
+        "queries": ["large language models", "transformer language models", "instruction tuning language models"],
+    },
+    {
+        "name": "RAG",
+        "queries": ["retrieval augmented generation", "dense retrieval language models", "retrieval language model"],
+    },
+    {
+        "name": "Agents",
+        "queries": ["language model agents", "tool use language models", "AI agents planning"],
+    },
+    {
+        "name": "Multimodal",
+        "queries": ["vision language models", "multimodal large language models", "video language models"],
+    },
+    {
+        "name": "Efficient Models",
+        "queries": ["model compression distillation quantization", "small language models", "efficient inference language models"],
+    },
+    {
+        "name": "Alignment and Evaluation",
+        "queries": ["AI alignment evaluation", "language model safety evaluation", "red teaming language models"],
+    },
 ]
 
 HOT_TERMS = [
@@ -109,14 +121,14 @@ HOT_TERMS = [
     "quantization",
     "alignment",
     "evaluation",
-    "RAG",
     "retrieval",
+    "rag",
     "long context",
     "post-training",
     "reinforcement learning",
     "diffusion",
     "robotics",
-    "AI for science",
+    "ai for science",
 ]
 
 
@@ -134,48 +146,94 @@ class Paper:
     module_hint: str = ""
 
 
-def fetch_json(url: str, timeout: int = 30) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "daily-ai-paper-briefing/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def fetch_text(url: str, timeout: int = 30) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "daily-ai-paper-briefing/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
-def clean_text(value: str) -> str:
-    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+def today_utc() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
 
 
 def cutoff(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
 
 
+def clean_text(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+
+
 def is_future_date(value: str) -> bool:
-    return bool(value and value[:10] > datetime.now(timezone.utc).date().isoformat())
+    return bool(value and value[:10] > today_utc())
+
+
+def fetch_json(url: str, timeout: int = 30) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "daily-ai-paper-briefing/2.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_text(url: str, timeout: int = 30) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": "daily-ai-paper-briefing/2.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def inverted_index_to_text(index: dict[str, list[int]]) -> str:
     if not index:
         return ""
-    words: list[tuple[int, str]] = []
+    pairs: list[tuple[int, str]] = []
     for word, positions in index.items():
-        for pos in positions:
-            words.append((pos, word))
-    return clean_text(" ".join(word for _, word in sorted(words)))
+        for position in positions:
+            pairs.append((position, word))
+    return clean_text(" ".join(word for _, word in sorted(pairs)))
 
 
-def search_openalex_topic(module: str, query: str, days: int = 21, per_page: int = 8) -> list[Paper]:
-    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
+def paper_from_openalex(item: dict, module_hint: str) -> Paper | None:
+    title = clean_text(item.get("title", ""))
+    date = clean_text(item.get("publication_date", ""))
+    if not title or is_future_date(date):
+        return None
+    authors = ", ".join(
+        clean_text(author.get("author", {}).get("display_name", ""))
+        for author in item.get("authorships", [])[:6]
+        if author.get("author")
+    )
+    institutions = " ".join(
+        clean_text(inst.get("display_name", ""))
+        for author in item.get("authorships", [])[:10]
+        for inst in author.get("institutions", [])[:2]
+    )
+    primary_location = item.get("primary_location") or {}
+    source_obj = primary_location.get("source") or {}
+    venue = clean_text(source_obj.get("display_name", ""))
+    abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
+    if institutions:
+        abstract = f"{abstract} Institutions: {institutions}"
+    doi = clean_text(item.get("doi", ""))
+    return Paper(
+        title=title,
+        authors=authors or "Unknown authors",
+        date=date,
+        source="OpenAlex",
+        url=doi or item.get("id") or "",
+        abstract=abstract,
+        venue=venue,
+        doi=doi,
+        cited_by_count=int(item.get("cited_by_count") or 0),
+        module_hint=module_hint,
+    )
+
+
+def search_openalex(
+    query: str,
+    from_date: str,
+    sort: str = "publication_date:desc",
+    per_page: int = 10,
+    module_hint: str = "",
+) -> list[Paper]:
     params = {
         "search": query,
-        "filter": f"from_publication_date:{cutoff(days)}",
-        "sort": "publication_date:desc",
+        "filter": f"from_publication_date:{from_date}",
+        "sort": sort,
         "per-page": str(per_page),
     }
+    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
     if mailto:
         params["mailto"] = mailto
     url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
@@ -184,87 +242,14 @@ def search_openalex_topic(module: str, query: str, days: int = 21, per_page: int
     except Exception as exc:
         print(f"OpenAlex query failed for {query!r}: {exc}", file=sys.stderr)
         return []
-    return [
-        paper_from_openalex(item, module)
-        for item in data.get("results", [])
-        if item.get("title") and not is_future_date(clean_text(item.get("publication_date", "")))
-    ]
-
-
-def search_openalex_hot(days: int = 180) -> list[Paper]:
-    papers: list[Paper] = []
-    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
-    for query in ["artificial intelligence", "large language models", "machine learning"]:
-        params = {
-            "search": query,
-            "filter": f"from_publication_date:{cutoff(days)}",
-            "sort": "cited_by_count:desc",
-            "per-page": "12",
-        }
-        if mailto:
-            params["mailto"] = mailto
-        url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
-        try:
-            data = fetch_json(url)
-        except Exception as exc:
-            print(f"OpenAlex hot query failed for {query!r}: {exc}", file=sys.stderr)
-            continue
-        papers.extend(
-            paper_from_openalex(item, "Trending / Highly Cited Recent")
-            for item in data.get("results", [])
-            if item.get("title") and not is_future_date(clean_text(item.get("publication_date", "")))
-        )
-    return papers
-
-
-def search_openalex_authors(days: int = 365) -> list[Paper]:
-    papers: list[Paper] = []
-    for query in AUTHOR_QUERIES:
-        papers.extend(search_openalex_topic("Notable Authors / Labs", query, days=days, per_page=4))
-    return papers
-
-
-def paper_from_openalex(item: dict, module: str) -> Paper:
-    publication_date = clean_text(item.get("publication_date", ""))
-    authors = ", ".join(
-        clean_text(a.get("author", {}).get("display_name", ""))
-        for a in item.get("authorships", [])[:6]
-        if a.get("author")
-    )
-    institutions = " ".join(
-        clean_text(i.get("display_name", ""))
-        for a in item.get("authorships", [])[:8]
-        for i in a.get("institutions", [])[:2]
-    )
-    primary_location = item.get("primary_location") or {}
-    source_obj = primary_location.get("source") or {}
-    source = clean_text(source_obj.get("display_name", ""))
-    abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
-    if institutions:
-        abstract = f"{abstract} Institutions: {institutions}"
-    doi = clean_text(item.get("doi", ""))
-    return Paper(
-        title=clean_text(item.get("title", "")),
-        authors=authors or "Unknown authors",
-        date=publication_date,
-        source="OpenAlex",
-        url=item.get("doi") or item.get("id") or "",
-        abstract=abstract,
-        venue=source,
-        doi=doi,
-        cited_by_count=int(item.get("cited_by_count") or 0),
-        module_hint=module,
-    )
+    papers = [paper_from_openalex(item, module_hint) for item in data.get("results", [])]
+    return [paper for paper in papers if paper]
 
 
 def search_arxiv() -> list[Paper]:
-    queries = [
-        'cat:cs.AI OR cat:cs.CL OR cat:cs.LG OR cat:cs.CV',
-        'all:"large language model" OR all:"language model agents" OR all:"multimodal"',
-        'all:"small language model" OR all:"model compression" OR all:"quantization"',
-    ]
     papers: list[Paper] = []
-    for query in queries:
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    for query in FRESH_ARXIV_QUERIES:
         params = {
             "search_query": query,
             "start": "0",
@@ -278,104 +263,144 @@ def search_arxiv() -> list[Paper]:
         except Exception as exc:
             print(f"arXiv query failed for {query!r}: {exc}", file=sys.stderr)
             continue
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(text)
         for entry in root.findall("atom:entry", ns):
             title = clean_text(entry.findtext("atom:title", default="", namespaces=ns))
+            date = clean_text(entry.findtext("atom:published", default="", namespaces=ns))[:10]
+            if not title or is_future_date(date):
+                continue
             abstract = clean_text(entry.findtext("atom:summary", default="", namespaces=ns))
             authors = ", ".join(
-                clean_text(a.findtext("atom:name", default="", namespaces=ns))
-                for a in entry.findall("atom:author", ns)[:6]
+                clean_text(author.findtext("atom:name", default="", namespaces=ns))
+                for author in entry.findall("atom:author", ns)[:6]
             )
-            published = clean_text(entry.findtext("atom:published", default="", namespaces=ns))[:10]
-            if is_future_date(published):
-                continue
-            link = clean_text(entry.findtext("atom:id", default="", namespaces=ns))
-            if title:
-                papers.append(Paper(title, authors or "Unknown authors", published, "arXiv", link, abstract, "arXiv", module_hint="Fresh arXiv"))
-    return papers
+            url = clean_text(entry.findtext("atom:id", default="", namespaces=ns))
+            papers.append(Paper(title, authors or "Unknown authors", date, "arXiv", url, abstract, "arXiv", module_hint="Fresh arXiv"))
+    return dedupe(papers)
 
 
-def search_crossref() -> list[Paper]:
+def search_trending() -> list[Paper]:
     papers: list[Paper] = []
-    for query in ["large language models", "artificial intelligence agents", "multimodal AI", "efficient language models"]:
-        params = {
-            "query.bibliographic": query,
-            "filter": f"from-pub-date:{cutoff(45)}",
-            "sort": "published",
-            "order": "desc",
-            "rows": "8",
-        }
-        url = "https://api.crossref.org/works?" + urllib.parse.urlencode(params)
-        try:
-            data = fetch_json(url)
-        except Exception as exc:
-            print(f"Crossref query failed for {query!r}: {exc}", file=sys.stderr)
-            continue
-        for item in data.get("message", {}).get("items", []):
-            title = clean_text(" ".join(item.get("title", [])[:1]))
-            if not title:
-                continue
-            authors = ", ".join(
-                clean_text(" ".join(filter(None, [a.get("given", ""), a.get("family", "")])))
-                for a in item.get("author", [])[:6]
-            )
-            date_parts = (
-                item.get("published-print", {}).get("date-parts")
-                or item.get("published-online", {}).get("date-parts")
-                or item.get("created", {}).get("date-parts")
-                or [[]]
-            )
-            date = "-".join(str(x) for x in date_parts[0]) if date_parts and date_parts[0] else ""
-            if is_future_date(date):
-                continue
-            venue = clean_text(" ".join(item.get("container-title", [])[:1]))
-            doi = clean_text(item.get("DOI", ""))
-            papers.append(
-                Paper(
-                    title=title,
-                    authors=authors or "Unknown authors",
-                    date=date,
-                    source="Crossref",
-                    url=f"https://doi.org/{doi}" if doi else clean_text(item.get("URL", "")),
-                    abstract=clean_text(item.get("abstract", "")),
-                    venue=venue,
-                    doi=doi,
-                    module_hint="Published / Proceedings",
-                )
-            )
-    return papers
+    for query in TRENDING_QUERIES:
+        papers.extend(search_openalex(query, cutoff(180), sort="cited_by_count:desc", per_page=10, module_hint="Trending"))
+    return [paper for paper in dedupe(papers) if paper.cited_by_count > 0]
 
 
-def classify(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract} {paper.venue} {paper.module_hint}".lower()
-    if paper.module_hint in {"Trending / Highly Cited Recent", "Notable Authors / Labs", "Fresh arXiv"}:
-        return paper.module_hint
-    if any(term in text for term in ["small language model", "distillation", "quantization", "compression", "efficient inference", "on device"]):
-        return "Small Models / Efficient AI"
-    if any(term in text for term in ["agent", "tool use", "planning", "reasoning", "test time"]):
-        return "Agents / Tool Use / Reasoning"
-    if any(term in text for term in ["multimodal", "vision-language", "video", "image generation", "diffusion"]):
-        return "Multimodal / Vision-Language"
-    if any(term in text for term in ["retrieval", "rag", "memory", "knowledge editing"]):
-        return "RAG / Memory / Knowledge"
-    if any(term in text for term in ["safety", "alignment", "red teaming", "reward model", "evaluation", "benchmark"]):
-        return "Alignment / Safety / Evaluation"
-    if any(term in text for term in ["robot", "code generation", "ai for science", "scientific discovery"]):
-        return "AI for Science / Code / Robotics"
-    return "Large Models / Foundation Models"
+def search_notable_authors_labs() -> list[Paper]:
+    papers: list[Paper] = []
+    for author in NOTABLE_AUTHORS:
+        papers.extend(search_openalex(f"{author} artificial intelligence", cutoff(365), per_page=5, module_hint="Notable author/lab"))
+    for lab in NOTABLE_LABS:
+        papers.extend(search_openalex(f"{lab} artificial intelligence", cutoff(365), per_page=5, module_hint="Notable author/lab"))
+    return dedupe(papers)
 
 
-def score(paper: Paper) -> int:
-    text = f"{paper.title} {paper.abstract} {paper.venue}".lower()
-    value = 0
-    value += 8 * sum(term.lower() in text for term in HOT_TERMS)
-    value += 12 if any(org.lower() in text for org in ORG_TERMS) else 0
-    value += min(paper.cited_by_count // 10, 25)
-    value += 10 if paper.source == "arXiv" and paper.date >= cutoff(7) else 0
-    value += 5 if paper.date >= cutoff(21) else 0
-    value += 6 if paper.module_hint == "Notable Authors / Labs" else 0
-    return value
+def daily_series() -> dict[str, object]:
+    index = datetime.now(timezone(timedelta(hours=8))).toordinal() % len(SERIES)
+    return SERIES[index]
+
+
+def search_series_reading(series: dict[str, object]) -> list[Paper]:
+    papers: list[Paper] = []
+    for query in series["queries"]:
+        papers.extend(search_openalex(query, "2012-01-01", sort="cited_by_count:desc", per_page=12, module_hint=f"{series['name']} series"))
+        papers.extend(search_openalex(query, "2022-01-01", sort="cited_by_count:desc", per_page=8, module_hint=f"{series['name']} frontier"))
+    return [paper for paper in dedupe(papers) if paper.cited_by_count >= 50]
+
+
+def text_of(paper: Paper) -> str:
+    return f"{paper.title} {paper.abstract} {paper.venue} {paper.authors}".lower()
+
+
+def contains_any(text: str, terms: Iterable[str]) -> bool:
+    return any(term.lower() in text for term in terms)
+
+
+def quality_signal(paper: Paper, fresh: bool = False) -> str:
+    text = text_of(paper)
+    reasons = []
+    if contains_any(text, NOTABLE_AUTHORS):
+        reasons.append("notable author")
+    if contains_any(text, NOTABLE_LABS):
+        reasons.append("major lab/company")
+    if not fresh and paper.cited_by_count:
+        reasons.append(f"{paper.cited_by_count} citations")
+    if contains_any(text, HOT_TERMS):
+        reasons.append("hot topic")
+    return ", ".join(reasons[:3]) or "metadata-level relevance; verify full paper"
+
+
+def keywords(paper: Paper) -> list[str]:
+    text = text_of(paper)
+    candidates = {
+        "LLM": ["large language model", "llm", "language model"],
+        "Small model": ["small language model", "distillation", "quantization", "compression"],
+        "Agent": ["agent", "tool use", "planning"],
+        "Reasoning": ["reasoning", "test-time", "test time"],
+        "Multimodal": ["multimodal", "vision-language", "video", "image"],
+        "RAG": ["retrieval", "rag", "memory"],
+        "Safety/eval": ["safety", "alignment", "evaluation", "benchmark", "red teaming"],
+        "RL": ["reinforcement learning", "rlhf", "policy"],
+        "GNN": ["graph neural", "graph representation", "gnn"],
+        "AI4Science": ["science", "scientific", "biology", "chemistry"],
+        "Robotics": ["robot", "robotics"],
+    }
+    tags = [label for label, terms in candidates.items() if contains_any(text, terms)]
+    return tags[:6] or ["AI"]
+
+
+def abstract_short(paper: Paper, limit: int = 300) -> str:
+    abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
+    if not abstract:
+        return "No abstract in metadata."
+    if len(abstract) <= limit:
+        return abstract
+    return abstract[:limit].rsplit(" ", 1)[0] + "..."
+
+
+def novelty(paper: Paper) -> str:
+    text = text_of(paper)
+    if "small language model" in text or "distillation" in text or "quantization" in text:
+        return "Efficiency angle: smaller/cheaper models, compression, or deployment constraints."
+    if "agent" in text or "tool use" in text:
+        return "Agentic angle: planning, tool orchestration, autonomy, or reliability."
+    if "multimodal" in text or "vision-language" in text:
+        return "Multimodal angle: richer input/output and evaluation beyond text-only tasks."
+    if "retrieval" in text or "rag" in text:
+        return "Knowledge angle: retrieval, memory, provenance, or grounded generation."
+    if "alignment" in text or "safety" in text or "evaluation" in text:
+        return "Trust angle: evaluation, safety, red-teaming, or alignment methodology."
+    if "graph" in text:
+        return "Relational structure angle: graph representation or message passing."
+    return "Capability or benchmark that may translate into a new research topic."
+
+
+def limitation(paper: Paper, fresh: bool = False) -> str:
+    text = text_of(paper)
+    if fresh:
+        return "Fresh arXiv; quality depends on author/lab signal and full-paper validation."
+    if "benchmark" in text or "evaluation" in text:
+        return "Check benchmark coverage, contamination risk, and practical relevance."
+    if "agent" in text:
+        return "Check reliability, cost, reproducibility, and failure recovery."
+    if "large language model" in text:
+        return "Check compute assumptions, data leakage, and whether gains generalize."
+    return "Check full text for evidence strength, baselines, and reproducibility."
+
+
+def score_fresh(paper: Paper) -> int:
+    text = text_of(paper)
+    return (
+        25 * contains_any(text, NOTABLE_LABS)
+        + 20 * contains_any(text, NOTABLE_AUTHORS)
+        + 8 * sum(term.lower() in text for term in HOT_TERMS)
+        + 10 * (paper.date >= cutoff(3))
+    )
+
+
+def score_cited(paper: Paper) -> int:
+    text = text_of(paper)
+    return min(paper.cited_by_count // 10, 40) + 12 * contains_any(text, NOTABLE_LABS) + 8 * sum(term.lower() in text for term in HOT_TERMS)
 
 
 def dedupe(papers: Iterable[Paper]) -> list[Paper]:
@@ -390,162 +415,88 @@ def dedupe(papers: Iterable[Paper]) -> list[Paper]:
     return result
 
 
-def summarize(abstract: str, limit: int = 380) -> str:
-    abstract = clean_text(re.sub(r"<[^>]+>", " ", abstract))
-    if not abstract:
-        return "No abstract available from the source metadata."
-    if len(abstract) <= limit:
-        return abstract
-    return abstract[:limit].rsplit(" ", 1)[0] + "..."
+def paper_block(paper: Paper, fresh: bool = False, include_citations: bool = True) -> list[str]:
+    lines = [
+        f"### {paper.title}",
+        f"- Authors: {paper.authors}",
+        f"- Date: {paper.date or 'Unknown'}",
+        f"- Link: {paper.url or 'No link available'}",
+    ]
+    if include_citations:
+        lines.append(f"- Citation signal: {paper.cited_by_count} OpenAlex citations")
+    lines.extend(
+        [
+            f"- Abstract: {abstract_short(paper)}",
+            f"- Keywords: {', '.join(keywords(paper))}",
+            f"- Novelty / highlight: {novelty(paper)}",
+            f"- Limitation: {limitation(paper, fresh=fresh)}",
+            f"- Quality signal: {quality_signal(paper, fresh=fresh)}",
+            "",
+        ]
+    )
+    return lines
 
 
-def build_markdown(papers: list[Paper]) -> str:
+def topic_summary(sections: dict[str, list[Paper]], series_name: str) -> list[str]:
+    all_papers = [paper for papers in sections.values() for paper in papers]
+    text = " ".join(text_of(paper) for paper in all_papers)
+    lines = []
+    if "agent" in text:
+        lines.append("- Agents remain a strong topic source: look for reliability, monitoring, evaluation, and human oversight gaps.")
+    if "small language model" in text or "distillation" in text:
+        lines.append("- Small-model work is useful for deployable topics: cost, privacy, edge constraints, and specialized organizational tasks.")
+    if "multimodal" in text or "vision-language" in text:
+        lines.append("- Multimodal work suggests richer artifact/interface topics, but evaluation quality matters more than demo quality.")
+    if "retrieval" in text or "rag" in text:
+        lines.append("- RAG/memory papers can become topics around provenance, trust calibration, and organizational knowledge decay.")
+    lines.append(f"- Today's series is {series_name}; use it to build background depth rather than only chasing new arXiv papers.")
+    return lines[:5]
+
+
+def build_markdown() -> str:
     now = datetime.now(timezone(timedelta(hours=8)))
-    groups: dict[str, list[Paper]] = {
-        "Fresh arXiv": [],
-        "Trending / Highly Cited Recent": [],
-        "Notable Authors / Labs": [],
-        "Large Models / Foundation Models": [],
-        "Small Models / Efficient AI": [],
-        "Agents / Tool Use / Reasoning": [],
-        "Multimodal / Vision-Language": [],
-        "RAG / Memory / Knowledge": [],
-        "Alignment / Safety / Evaluation": [],
-        "AI for Science / Code / Robotics": [],
-        "Published / Proceedings": [],
-    }
-    for paper in sorted(papers, key=score, reverse=True):
-        groups.setdefault(classify(paper), []).append(paper)
+    fresh = sorted(search_arxiv(), key=score_fresh, reverse=True)[:10]
+    trending = sorted(search_trending(), key=score_cited, reverse=True)[:8]
+    notable = sorted(search_notable_authors_labs(), key=score_cited, reverse=True)[:8]
+    series = daily_series()
+    series_papers = sorted(search_series_reading(series), key=score_cited, reverse=True)[:10]
 
-    limits = {
-        "Fresh arXiv": 6,
-        "Trending / Highly Cited Recent": 5,
-        "Notable Authors / Labs": 5,
-        "Large Models / Foundation Models": 3,
-        "Small Models / Efficient AI": 3,
-        "Agents / Tool Use / Reasoning": 3,
-        "Multimodal / Vision-Language": 3,
-        "RAG / Memory / Knowledge": 3,
-        "Alignment / Safety / Evaluation": 3,
-        "AI for Science / Code / Robotics": 3,
-        "Published / Proceedings": 3,
+    sections = {
+        "Fresh arXiv": fresh,
+        "Trending": trending,
+        "Notable author/lab": notable,
+        f"{series['name']} series": series_papers,
     }
 
     lines = [
-        "# Daily AI Paper Inspiration Briefing",
-        "",
+        "# Daily AI Paper Briefing",
         f"Generated: {now:%Y-%m-%d %H:%M} Asia/Shanghai",
         "",
-        "Goal: expose you to diverse frontier AI papers for research-topic inspiration, mixing latest arXiv work, hot recent papers, notable-author/lab work, small models, large models, agents, multimodal, RAG, safety, and AI-for-science/code/robotics.",
+        "## 1. Fresh arXiv",
         "",
     ]
+    for paper in fresh:
+        lines.extend(paper_block(paper, fresh=True, include_citations=False))
 
-    shown: set[str] = set()
-    for group, items in groups.items():
-        selected = []
-        for paper in items:
-            key = re.sub(r"[^a-z0-9]+", "", paper.title.lower())[:140]
-            if key in shown:
-                continue
-            selected.append(paper)
-            shown.add(key)
-            if len(selected) >= limits[group]:
-                break
-        if not selected:
-            continue
-        lines.extend([f"## {group}", ""])
-        for idx, paper in enumerate(selected, 1):
-            lines.extend(
-                [
-                    f"### {idx}. {paper.title}",
-                    "",
-                    f"- Authors: {paper.authors}",
-                    f"- Date: {paper.date or 'Unknown'}",
-                    f"- Source: {paper.source}" + (f" / {paper.venue}" if paper.venue else ""),
-                    f"- Link: {paper.url or 'No link available'}",
-                    f"- DOI: {paper.doi or 'Not available'}",
-                    f"- Citation signal: {paper.cited_by_count} OpenAlex citations",
-                    f"- Why it may spark ideas: {idea_angle(paper)}",
-                    f"- Method / artifact clue: {method_clue(paper)}",
-                    f"- Summary: {summarize(paper.abstract)}",
-                    f"- Tags: {', '.join(tags_for(paper))}",
-                    "",
-                ]
-            )
+    lines.extend(["## 2. Trending Recent Papers / Topics", ""])
+    for paper in trending:
+        lines.extend(paper_block(paper))
 
-    lines.extend(["## Topic Sparks", ""])
-    lines.extend(topic_sparks(papers))
-    lines.extend(["", "## Read First", ""])
-    top = sorted(papers, key=score, reverse=True)[:1]
-    lines.append(f"Start with: **{top[0].title}**" if top else "No papers were retrieved today.")
+    lines.extend(["## 3. Notable Author / Lab Papers", ""])
+    for paper in notable:
+        lines.extend(paper_block(paper))
+
+    lines.extend([f"## 4. Daily Series: {series['name']} Must-Reads", ""])
+    if series_papers:
+        for paper in series_papers:
+            lines.extend(paper_block(paper))
+    else:
+        lines.extend(["No sufficiently cited series papers found today.", ""])
+
+    lines.extend(["## Highlight Summary", ""])
+    lines.extend(topic_summary(sections, str(series["name"])))
     lines.append("")
     return "\n".join(lines)
-
-
-def tags_for(paper: Paper) -> list[str]:
-    text = f"{paper.title} {paper.abstract}".lower()
-    candidates = {
-        "LLM": ["large language model", "llm", "language model"],
-        "Small Model": ["small language model", "distillation", "quantization", "compression"],
-        "Agent": ["agent", "tool use", "planning"],
-        "Reasoning": ["reasoning", "test time"],
-        "Multimodal": ["multimodal", "vision-language", "video", "image"],
-        "RAG": ["retrieval", "rag", "memory"],
-        "Safety/Eval": ["safety", "alignment", "evaluation", "benchmark", "red teaming"],
-        "AI4Science": ["science", "scientific", "biology", "chemistry"],
-        "Robotics": ["robot", "robotics"],
-        "Code": ["code generation", "programming"],
-    }
-    tags = [label for label, terms in candidates.items() if any(term in text for term in terms)]
-    return tags[:6] or ["AI"]
-
-
-def idea_angle(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract}".lower()
-    if "small language model" in text or "distillation" in text or "quantization" in text:
-        return "Small/efficient models can inspire deployable, low-cost, privacy-preserving, or edge AI research topics."
-    if "agent" in text or "tool use" in text:
-        return "Agent workflows suggest topics around task decomposition, tool orchestration, reliability, monitoring, and human supervision."
-    if "multimodal" in text or "vision-language" in text:
-        return "Multimodal systems open questions around richer interaction, embodied workflows, evaluation, and domain-specific interfaces."
-    if "alignment" in text or "safety" in text or "evaluation" in text:
-        return "Safety/evaluation work can become research on governance artifacts, benchmarks, failure modes, and trustworthy AI deployment."
-    if "retrieval" in text or "rag" in text:
-        return "RAG/memory work suggests topics around knowledge quality, provenance, personalization, and organizational knowledge systems."
-    return "It may reveal a new capability, benchmark, system pattern, or application domain worth translating into a research question."
-
-
-def method_clue(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract}".lower()
-    if "benchmark" in text or "evaluation" in text:
-        return "Benchmark/evaluation paper."
-    if "dataset" in text:
-        return "Dataset or data-centric contribution."
-    if "framework" in text or "system" in text or "agent" in text:
-        return "System/framework/artifact-style contribution."
-    if "theory" in text or "analysis" in text:
-        return "Analytical or conceptual contribution."
-    if "training" in text or "fine-tuning" in text or "post-training" in text:
-        return "Training or post-training method paper."
-    return "Check full text for method, benchmark, dataset, or system contribution."
-
-
-def topic_sparks(papers: list[Paper]) -> list[str]:
-    text = " ".join(p.title + " " + p.abstract for p in papers[:60]).lower()
-    sparks = []
-    if "small language model" in text or "distillation" in text:
-        sparks.append("- Small-model topic: compare when smaller specialized models outperform general large models in real organizational workflows.")
-    if "agent" in text or "tool use" in text:
-        sparks.append("- Agent topic: design oversight and recovery mechanisms for multi-step AI agents in high-stakes knowledge work.")
-    if "multimodal" in text or "vision-language" in text:
-        sparks.append("- Multimodal topic: build evaluation tasks that measure whether multimodal models improve decisions, not just perception accuracy.")
-    if "retrieval" in text or "rag" in text:
-        sparks.append("- RAG topic: study provenance, trust calibration, and knowledge decay in retrieval-augmented organizational assistants.")
-    if "alignment" in text or "safety" in text:
-        sparks.append("- Safety topic: turn red-team findings into deployable governance artifacts and continuous evaluation dashboards.")
-    while len(sparks) < 5:
-        sparks.append("- Cross-field topic: translate a frontier AI capability into a concrete artifact, benchmark, or field evaluation setting.")
-    return sparks[:5]
 
 
 def send_email(markdown: str) -> None:
@@ -563,7 +514,7 @@ def send_email(markdown: str) -> None:
 
     today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     message = EmailMessage()
-    message["Subject"] = f"Daily AI Paper Inspiration Briefing - {today}"
+    message["Subject"] = f"Daily AI Paper Briefing - {today}"
     message["From"] = mail_from
     message["To"] = ", ".join(recipients)
     message.set_content(markdown)
@@ -601,15 +552,7 @@ def markdown_to_html(markdown: str) -> str:
 
 
 def main() -> None:
-    papers: list[Paper] = []
-    for module, queries in TOPIC_QUERIES.items():
-        for query in queries:
-            papers.extend(search_openalex_topic(module, query))
-    papers.extend(search_openalex_hot())
-    papers.extend(search_openalex_authors())
-    papers.extend(search_arxiv())
-    papers.extend(search_crossref())
-    markdown = build_markdown(dedupe(papers))
+    markdown = build_markdown()
     print(markdown)
     send_email(markdown)
 

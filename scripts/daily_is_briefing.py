@@ -10,37 +10,83 @@ import sys
 import textwrap
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from typing import Iterable
 
 
-TOPICS = [
-    "information systems design science",
-    "design science research information systems",
-    "digital artifact design information systems",
-    "human AI collaboration artifact",
-    "generative AI information systems design",
-    "decision support systems design science",
-    "digital platform design information systems",
-    "enterprise systems design science",
-    "health information technology design science",
-    "privacy cybersecurity tool design information systems",
-]
-
-VENUES = [
+FIRST_TIER_JOURNALS = [
     "MIS Quarterly",
     "Information Systems Research",
+    "Management Science",
+]
+
+SECOND_TIER_JOURNALS = [
+    "Production and Operations Management",
     "Journal of Management Information Systems",
+    "Journal of Operations Management",
     "Journal of the Association for Information Systems",
-    "Information & Management",
     "Decision Support Systems",
+    "Information & Management",
+    "European Journal of Information Systems",
+    "Information Systems Journal",
+]
+
+IS_CONFERENCES = [
     "International Conference on Information Systems",
     "European Conference on Information Systems",
     "Pacific Asia Conference on Information Systems",
     "Hawaii International Conference on System Sciences",
+    "Americas Conference on Information Systems",
+    "Conference on Information Systems and Technology",
+    "Workshop on Information Systems and Economics",
+]
+
+DAILY_IS_QUERIES = [
+    *FIRST_TIER_JOURNALS,
+    *SECOND_TIER_JOURNALS,
+    *IS_CONFERENCES,
+    "information systems digital transformation",
+    "information systems artificial intelligence",
+    "information systems platform",
+    "information systems decision support",
+]
+
+DSR_AI_QUERIES = [
+    "design science artificial intelligence information systems",
+    "machine learning decision support information systems",
+    "deep learning decision support system information systems",
+    "AI artifact design science information systems",
+    "human AI collaboration design science information systems",
+    "generative AI artifact information systems",
+    "data analytics artifact design science information systems",
+    "algorithmic decision support design science information systems",
+    "health information technology AI design science",
+    "cybersecurity privacy AI tool design science information systems",
+]
+
+DSR_AI_CONFERENCE_QUERIES = [
+    f"{conference} artificial intelligence design science"
+    for conference in IS_CONFERENCES
+] + [
+    f"{conference} machine learning decision support"
+    for conference in IS_CONFERENCES
+]
+
+AI_ML_TERMS = [
+    "artificial intelligence",
+    "machine learning",
+    "deep learning",
+    "large language model",
+    "generative ai",
+    "algorithm",
+    "analytics",
+    "neural",
+    "prediction",
+    "classification",
+    "recommendation",
+    "decision support",
 ]
 
 DSR_TERMS = [
@@ -50,60 +96,36 @@ DSR_TERMS = [
     "prototype",
     "design principle",
     "design theory",
-    "design knowledge",
     "design evaluation",
-    "instantiate",
-    "instantiation",
+    "action design research",
     "build and evaluate",
-    "decision aid",
-    "decision support",
-    "system design",
-    "framework",
-    "method",
+    "instantiation",
     "tool",
-]
-
-EMPIRICAL_TERMS = [
-    "empirical",
-    "survey",
-    "field experiment",
-    "experiment",
-    "quasi-experiment",
-    "econometric",
-    "archival",
-    "panel data",
-    "difference-in-differences",
-    "regression",
-    "case study",
-    "interview",
-    "mixed method",
+    "system",
+    "framework",
 ]
 
 BEHAVIORAL_TERMS = [
     "behavior",
     "behaviour",
     "adoption",
-    "user",
-    "individual",
-    "team",
-    "organization",
-    "organisation",
     "trust",
     "acceptance",
+    "user",
     "intention",
-    "human-ai",
-    "human ai",
+    "survey",
+    "experiment",
 ]
 
-HIGH_VALUE_READING_QUERIES = [
-    "design science research information systems artifact evaluation",
-    "design principles information systems artificial intelligence",
-    "design science generative AI information systems",
-    "human AI collaboration design science information systems",
-    "digital platform design principles information systems",
-    "decision support systems design science artificial intelligence",
-    "health information technology design science artifact",
-    "cybersecurity privacy tool design science information systems",
+MODELING_TERMS = [
+    "model",
+    "optimization",
+    "simulation",
+    "econometric",
+    "causal",
+    "regression",
+    "panel data",
+    "structural",
 ]
 
 
@@ -118,255 +140,285 @@ class Paper:
     venue: str = ""
     doi: str = ""
     cited_by_count: int = 0
+    module_hint: str = ""
 
 
-def fetch_json(url: str, timeout: int = 30) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+def today_utc() -> str:
+    return datetime.now(timezone.utc).date().isoformat()
 
 
-def fetch_text(url: str, timeout: int = 30) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/1.0"})
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return response.read().decode("utf-8", errors="replace")
+def cutoff(days: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+
+def years_ago(years: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=365 * years)).date().isoformat()
 
 
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
 
 
-def recent_cutoff(days: int = 14) -> str:
-    return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-
-
 def is_future_date(value: str) -> bool:
-    return bool(value and value[:10] > datetime.now(timezone.utc).date().isoformat())
+    return bool(value and value[:10] > today_utc())
 
 
-def search_openalex() -> list[Paper]:
-    papers: list[Paper] = []
-    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
-    for topic in TOPICS:
-        params = {
-            "search": topic,
-            "filter": f"from_publication_date:{recent_cutoff(21)}",
-            "sort": "publication_date:desc",
-            "per-page": "8",
-        }
-        if mailto:
-            params["mailto"] = mailto
-        url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
-        try:
-            data = fetch_json(url)
-        except Exception as exc:
-            print(f"OpenAlex query failed for {topic!r}: {exc}", file=sys.stderr)
-            continue
-        for item in data.get("results", []):
-            title = clean_text(item.get("title", ""))
-            if not title:
-                continue
-            publication_date = clean_text(item.get("publication_date", ""))
-            if is_future_date(publication_date):
-                continue
-            authors = ", ".join(
-                clean_text(a.get("author", {}).get("display_name", ""))
-                for a in item.get("authorships", [])[:6]
-                if a.get("author")
-            )
-            abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
-            primary_location = item.get("primary_location") or {}
-            source_obj = primary_location.get("source") or {}
-            source = clean_text(source_obj.get("display_name", ""))
-            doi = clean_text(item.get("doi", ""))
-            papers.append(
-                Paper(
-                    title=title,
-                    authors=authors or "Unknown authors",
-                    date=publication_date,
-                    source="OpenAlex",
-                    url=item.get("doi") or item.get("id") or "",
-                    abstract=abstract,
-                    venue=source,
-                    doi=doi,
-                    cited_by_count=int(item.get("cited_by_count") or 0),
-                )
-            )
-    return papers
-
-
-def search_high_value_readings() -> list[Paper]:
-    papers: list[Paper] = []
-    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
-    max_date = (datetime.now(timezone.utc) - timedelta(days=60)).date().isoformat()
-    for query in HIGH_VALUE_READING_QUERIES:
-        params = {
-            "search": query,
-            "filter": f"from_publication_date:2018-01-01,to_publication_date:{max_date}",
-            "sort": "cited_by_count:desc",
-            "per-page": "8",
-        }
-        if mailto:
-            params["mailto"] = mailto
-        url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
-        try:
-            data = fetch_json(url)
-        except Exception as exc:
-            print(f"OpenAlex reading query failed for {query!r}: {exc}", file=sys.stderr)
-            continue
-        for item in data.get("results", []):
-            title = clean_text(item.get("title", ""))
-            if not title:
-                continue
-            publication_date = clean_text(item.get("publication_date", ""))
-            if is_future_date(publication_date):
-                continue
-            authors = ", ".join(
-                clean_text(a.get("author", {}).get("display_name", ""))
-                for a in item.get("authorships", [])[:6]
-                if a.get("author")
-            )
-            abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
-            primary_location = item.get("primary_location") or {}
-            source_obj = primary_location.get("source") or {}
-            source = clean_text(source_obj.get("display_name", ""))
-            doi = clean_text(item.get("doi", ""))
-            paper = Paper(
-                title=title,
-                authors=authors or "Unknown authors",
-                date=publication_date,
-                source="OpenAlex",
-                url=item.get("doi") or item.get("id") or "",
-                abstract=abstract,
-                venue=source,
-                doi=doi,
-                cited_by_count=int(item.get("cited_by_count") or 0),
-            )
-            if classify(paper) == "Design Science Research" or score(paper) >= 30:
-                papers.append(paper)
-    return dedupe(papers)
+def fetch_json(url: str, timeout: int = 30) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/2.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def inverted_index_to_text(index: dict[str, list[int]]) -> str:
     if not index:
         return ""
-    words: list[tuple[int, str]] = []
+    pairs: list[tuple[int, str]] = []
     for word, positions in index.items():
-        for pos in positions:
-            words.append((pos, word))
-    return clean_text(" ".join(word for _, word in sorted(words)))
+        for position in positions:
+            pairs.append((position, word))
+    return clean_text(" ".join(word for _, word in sorted(pairs)))
 
 
-def search_arxiv() -> list[Paper]:
-    query = " OR ".join(f'all:"{topic}"' for topic in TOPICS[:6])
+def paper_from_openalex(item: dict, module_hint: str) -> Paper | None:
+    title = clean_text(item.get("title", ""))
+    date = clean_text(item.get("publication_date", ""))
+    if not title or is_future_date(date):
+        return None
+
+    authors = ", ".join(
+        clean_text(author.get("author", {}).get("display_name", ""))
+        for author in item.get("authorships", [])[:6]
+        if author.get("author")
+    )
+    primary_location = item.get("primary_location") or {}
+    source_obj = primary_location.get("source") or {}
+    venue = clean_text(source_obj.get("display_name", ""))
+    doi = clean_text(item.get("doi", ""))
+    return Paper(
+        title=title,
+        authors=authors or "Unknown authors",
+        date=date,
+        source="OpenAlex",
+        url=doi or item.get("id") or "",
+        abstract=inverted_index_to_text(item.get("abstract_inverted_index") or {}),
+        venue=venue,
+        doi=doi,
+        cited_by_count=int(item.get("cited_by_count") or 0),
+        module_hint=module_hint,
+    )
+
+
+def search_openalex(
+    query: str,
+    from_date: str,
+    to_date: str | None = None,
+    sort: str = "publication_date:desc",
+    per_page: int = 10,
+    module_hint: str = "",
+) -> list[Paper]:
+    filters = [f"from_publication_date:{from_date}"]
+    if to_date:
+        filters.append(f"to_publication_date:{to_date}")
     params = {
-        "search_query": query,
-        "start": "0",
-        "max_results": "20",
-        "sortBy": "submittedDate",
-        "sortOrder": "descending",
+        "search": query,
+        "filter": ",".join(filters),
+        "sort": sort,
+        "per-page": str(per_page),
     }
-    url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode(params)
+    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
+    if mailto:
+        params["mailto"] = mailto
+    url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
     try:
-        text = fetch_text(url)
+        data = fetch_json(url)
     except Exception as exc:
-        print(f"arXiv query failed: {exc}", file=sys.stderr)
+        print(f"OpenAlex query failed for {query!r}: {exc}", file=sys.stderr)
         return []
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
-    root = ET.fromstring(text)
+    papers = [paper_from_openalex(item, module_hint) for item in data.get("results", [])]
+    return [paper for paper in papers if paper]
+
+
+def search_daily_is() -> list[Paper]:
     papers: list[Paper] = []
-    for entry in root.findall("atom:entry", ns):
-        title = clean_text(entry.findtext("atom:title", default="", namespaces=ns))
-        abstract = clean_text(entry.findtext("atom:summary", default="", namespaces=ns))
-        authors = ", ".join(
-            clean_text(a.findtext("atom:name", default="", namespaces=ns))
-            for a in entry.findall("atom:author", ns)[:6]
+    for query in DAILY_IS_QUERIES:
+        papers.extend(search_openalex(query, cutoff(21), per_page=6, module_hint="Latest IS papers"))
+    return filter_relevant_is(dedupe(papers))
+
+
+def search_recent_high_value_dsr_ai() -> list[Paper]:
+    papers: list[Paper] = []
+    for query in DSR_AI_QUERIES:
+        papers.extend(
+            search_openalex(
+                query,
+                years_ago(3),
+                sort="cited_by_count:desc",
+                per_page=12,
+                module_hint="Recent high-value DSR + AI/ML",
+            )
         )
-        published = clean_text(entry.findtext("atom:published", default="", namespaces=ns))[:10]
-        link = clean_text(entry.findtext("atom:id", default="", namespaces=ns))
-        if title:
-            papers.append(Paper(title, authors or "Unknown authors", published, "arXiv", link, abstract, "arXiv"))
-    return papers
+    return [
+        paper
+        for paper in dedupe(papers)
+        if is_ai_dsr(paper) and venue_priority(paper.venue) > 0
+    ]
 
 
-def search_crossref() -> list[Paper]:
+def search_recent_conference_dsr_ai() -> list[Paper]:
     papers: list[Paper] = []
-    for topic in TOPICS[:7]:
-        params = {
-            "query.bibliographic": topic,
-            "filter": f"from-pub-date:{recent_cutoff(30)}",
-            "sort": "published",
-            "order": "desc",
-            "rows": "6",
-        }
-        url = "https://api.crossref.org/works?" + urllib.parse.urlencode(params)
-        try:
-            data = fetch_json(url)
-        except Exception as exc:
-            print(f"Crossref query failed for {topic!r}: {exc}", file=sys.stderr)
-            continue
-        for item in data.get("message", {}).get("items", []):
-            title = clean_text(" ".join(item.get("title", [])[:1]))
-            if not title:
-                continue
-            authors = ", ".join(
-                clean_text(" ".join(filter(None, [a.get("given", ""), a.get("family", "")])))
-                for a in item.get("author", [])[:6]
+    for query in DSR_AI_CONFERENCE_QUERIES:
+        papers.extend(
+            search_openalex(
+                query,
+                cutoff(90),
+                sort="publication_date:desc",
+                per_page=8,
+                module_hint="Recent IS conference DSR + AI/ML",
             )
-            date_parts = (
-                item.get("published-print", {})
-                .get("date-parts")
-                or item.get("published-online", {}).get("date-parts")
-                or item.get("created", {}).get("date-parts")
-                or [[]]
-            )
-            date = "-".join(str(x) for x in date_parts[0]) if date_parts and date_parts[0] else ""
-            if is_future_date(date):
-                continue
-            venue = clean_text(" ".join(item.get("container-title", [])[:1]))
-            doi = clean_text(item.get("DOI", ""))
-            papers.append(
-                Paper(
-                    title=title,
-                    authors=authors or "Unknown authors",
-                    date=date,
-                    source="Crossref",
-                    url=f"https://doi.org/{doi}" if doi else clean_text(item.get("URL", "")),
-                    abstract=clean_text(item.get("abstract", "")),
-                    venue=venue,
-                    doi=doi,
-                )
-            )
-    return papers
+        )
+    return [
+        paper
+        for paper in dedupe(papers)
+        if is_ai_dsr(paper) and is_conference_like(paper)
+    ]
 
 
-def classify(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract} {paper.venue}".lower()
-    if any(term in text for term in DSR_TERMS):
-        return "Design Science Research"
-    if any(term in text for term in BEHAVIORAL_TERMS):
-        return "Behavioral / Organizational IS"
-    if any(term in text for term in EMPIRICAL_TERMS):
-        return "Adjacent Empirical IS"
-    return "Other Relevant IS"
+def filter_relevant_is(papers: list[Paper]) -> list[Paper]:
+    filtered = []
+    for paper in papers:
+        text = paper_text(paper)
+        if venue_priority(paper.venue) > 0 or is_conference_like(paper) or "information systems" in text:
+            filtered.append(paper)
+    return filtered
 
 
-def score(paper: Paper) -> int:
-    text = f"{paper.title} {paper.abstract} {paper.venue}".lower()
-    value = 0
-    value += 12 * sum(term in text for term in DSR_TERMS)
-    value += 3 * sum(term in text for term in EMPIRICAL_TERMS)
-    value += 3 * sum(term in text for term in BEHAVIORAL_TERMS)
-    value += 10 * any(venue.lower() in text for venue in VENUES)
-    value += 5 if paper.source == "OpenAlex" else 0
-    return value
+def paper_text(paper: Paper) -> str:
+    return f"{paper.title} {paper.abstract} {paper.venue}".lower()
+
+
+def contains_any(text: str, terms: Iterable[str]) -> bool:
+    return any(term.lower() in text for term in terms)
+
+
+def is_ai_dsr(paper: Paper) -> bool:
+    text = paper_text(paper)
+    return contains_any(text, AI_ML_TERMS) and (
+        contains_any(text, DSR_TERMS)
+        or "decision support" in text
+        or "practical" in text
+        or "application" in text
+    )
+
+
+def venue_priority(venue: str) -> int:
+    lowered = venue.lower()
+    if any(name.lower() in lowered for name in FIRST_TIER_JOURNALS):
+        return 4
+    if any(name.lower() in lowered for name in SECOND_TIER_JOURNALS):
+        return 3
+    if any(name.lower() in lowered for name in IS_CONFERENCES):
+        return 2
+    return 0
+
+
+def is_conference_like(paper: Paper) -> bool:
+    text = f"{paper.venue} {paper.title}".lower()
+    return any(name.lower() in text for name in IS_CONFERENCES) or "conference" in text or "proceedings" in text
+
+
+def classify_domain(paper: Paper) -> str:
+    text = paper_text(paper)
+    labels = []
+    if contains_any(text, DSR_TERMS):
+        labels.append("design")
+    if contains_any(text, AI_ML_TERMS):
+        labels.append("ai/ml")
+    if contains_any(text, MODELING_TERMS):
+        labels.append("modeling")
+    if contains_any(text, BEHAVIORAL_TERMS):
+        labels.append("behavioral")
+    if "platform" in text:
+        labels.append("platform")
+    if "health" in text or "clinical" in text:
+        labels.append("health it")
+    if "security" in text or "privacy" in text or "cyber" in text:
+        labels.append("security/privacy")
+    return ", ".join(dict.fromkeys(labels)) or "general IS"
+
+
+def keywords(paper: Paper) -> list[str]:
+    text = paper_text(paper)
+    candidates = {
+        "DSR": DSR_TERMS,
+        "AI/ML": AI_ML_TERMS,
+        "Modeling": MODELING_TERMS,
+        "Behavioral": BEHAVIORAL_TERMS,
+        "Decision support": ["decision support", "decision aid"],
+        "Platform": ["platform", "ecosystem"],
+        "Health IT": ["health", "clinical", "medical"],
+        "Security/privacy": ["security", "privacy", "cybersecurity"],
+    }
+    tags = [label for label, terms in candidates.items() if contains_any(text, terms)]
+    return tags[:6] or ["Information Systems"]
+
+
+def abstract_short(paper: Paper, limit: int = 320) -> str:
+    abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
+    if not abstract:
+        return "No abstract in metadata."
+    if len(abstract) <= limit:
+        return abstract
+    return abstract[:limit].rsplit(" ", 1)[0] + "..."
+
+
+def novelty(paper: Paper) -> str:
+    text = paper_text(paper)
+    if "action design research" in text:
+        return "Action-design study linking artifact building with real organizational use."
+    if "generative ai" in text or "large language model" in text:
+        return "Applies GenAI/LLM capability to an IS artifact, workflow, or decision setting."
+    if "machine learning" in text or "deep learning" in text:
+        return "Uses ML/DL to solve an applied organizational or decision problem."
+    if "design principle" in text or "design theory" in text:
+        return "Attempts to extract reusable design knowledge rather than only report effects."
+    if "platform" in text:
+        return "Connects digital platform design/governance to IS outcomes."
+    return "Potentially useful IS contribution; verify novelty from full text."
+
+
+def limitation(paper: Paper) -> str:
+    text = paper_text(paper)
+    if "survey" in text or "interview" in text:
+        return "Likely context- and sample-dependent; check external validity."
+    if "case study" in text or "action design" in text:
+        return "Likely strong context fit but limited generalizability; check evaluation depth."
+    if "model" in text or "algorithm" in text or "machine learning" in text:
+        return "Check data scope, baseline choice, deployment realism, and robustness."
+    if not paper.abstract:
+        return "Metadata is thin; full text needed before judging contribution."
+    return "Full-text reading needed for causal claims, evaluation strength, and boundary conditions."
+
+
+def score_daily(paper: Paper) -> int:
+    return venue_priority(paper.venue) * 20 + min(paper.cited_by_count // 10, 15) + len(set(keywords(paper))) * 2
+
+
+def score_dsr_ai(paper: Paper) -> int:
+    text = paper_text(paper)
+    return (
+        venue_priority(paper.venue) * 30
+        + min(paper.cited_by_count // 20, 25)
+        + 15 * contains_any(text, AI_ML_TERMS)
+        + 12 * contains_any(text, DSR_TERMS)
+        + 8 * ("decision support" in text or "application" in text)
+    )
 
 
 def dedupe(papers: Iterable[Paper]) -> list[Paper]:
     seen: set[str] = set()
     result: list[Paper] = []
     for paper in papers:
-        key = re.sub(r"[^a-z0-9]+", "", paper.title.lower())[:120]
+        key = re.sub(r"[^a-z0-9]+", "", paper.title.lower())[:140]
         if not key or key in seen:
             continue
         seen.add(key)
@@ -374,197 +426,88 @@ def dedupe(papers: Iterable[Paper]) -> list[Paper]:
     return result
 
 
-def summarize(abstract: str, limit: int = 420) -> str:
-    abstract = clean_text(re.sub(r"<[^>]+>", " ", abstract))
-    if not abstract:
-        return "No abstract available from the source metadata."
-    if len(abstract) <= limit:
-        return abstract
-    return abstract[:limit].rsplit(" ", 1)[0] + "..."
-
-
-def build_markdown(papers: list[Paper], high_value_readings: list[Paper]) -> str:
-    now = datetime.now(timezone(timedelta(hours=8)))
-    groups = {
-        "Design Science Research": [],
-        "Adjacent Empirical IS": [],
-        "Behavioral / Organizational IS": [],
-        "Other Relevant IS": [],
-    }
-    for paper in sorted(papers, key=score, reverse=True):
-        groups[classify(paper)].append(paper)
-
-    limits = {
-        "Design Science Research": 6,
-        "Adjacent Empirical IS": 3,
-        "Behavioral / Organizational IS": 3,
-        "Other Relevant IS": 3,
-    }
+def paper_block(paper: Paper, include_domain: bool = False, include_citations: bool = False) -> list[str]:
     lines = [
-        f"# Daily IS Design Science Research Briefing",
-        "",
+        f"### {paper.title}",
+        f"- Authors: {paper.authors}",
+        f"- Date: {paper.date or 'Unknown'}",
+        f"- Venue/source: {paper.venue or paper.source}",
+        f"- Link: {paper.url or 'No link available'}",
+    ]
+    if include_domain:
+        lines.append(f"- Field: {classify_domain(paper)}")
+    if include_citations:
+        lines.append(f"- Citation signal: {paper.cited_by_count} OpenAlex citations")
+    lines.extend(
+        [
+            f"- Abstract: {abstract_short(paper)}",
+            f"- Keywords: {', '.join(keywords(paper))}",
+            f"- Novelty / highlight: {novelty(paper)}",
+            f"- Limitation: {limitation(paper)}",
+            "",
+        ]
+    )
+    return lines
+
+
+def highlight_summary(sections: dict[str, list[Paper]]) -> list[str]:
+    all_papers = [paper for papers in sections.values() for paper in papers]
+    text = " ".join(paper_text(paper) for paper in all_papers)
+    lines = []
+    if "generative ai" in text or "large language model" in text:
+        lines.append("- GenAI/LLM is the strongest current bridge into DSR: artifact design, workflow redesign, and human oversight are recurring angles.")
+    if "decision support" in text or "machine learning" in text or "deep learning" in text:
+        lines.append("- Applied ML/DL decision support remains the most relevant lane for your preference: look for papers with real deployment or field evaluation.")
+    if "platform" in text:
+        lines.append("- Platform papers can generate design-principle topics around governance, complementors, and AI-enabled coordination.")
+    if "health" in text or "security" in text or "privacy" in text:
+        lines.append("- Health/security/privacy settings offer concrete problem contexts where DSR evaluation can be stronger than generic tool-building.")
+    while len(lines) < 3:
+        lines.append("- Best topic candidates are papers that combine artifact building, AI/ML capability, and credible field or organizational evaluation.")
+    return lines[:4]
+
+
+def build_markdown() -> str:
+    now = datetime.now(timezone(timedelta(hours=8)))
+    latest = sorted(search_daily_is(), key=score_daily, reverse=True)[:10]
+    high_value = sorted(search_recent_high_value_dsr_ai(), key=score_dsr_ai, reverse=True)[:8]
+    conferences = sorted(search_recent_conference_dsr_ai(), key=score_dsr_ai, reverse=True)[:10]
+
+    sections = {
+        "Latest IS papers": latest,
+        "Recent high-value DSR + AI/ML papers": high_value,
+        "Recent IS conference DSR + AI/ML papers": conferences,
+    }
+
+    lines = [
+        "# Daily IS Paper Briefing",
         f"Generated: {now:%Y-%m-%d %H:%M} Asia/Shanghai",
         "",
     ]
-    if not groups["Design Science Research"]:
-        lines.extend(
-            [
-                "> No strong Design Science Research matches were found in today's metadata scan. "
-                "The briefing is filled with adjacent IS papers with possible design implications.",
-                "",
-            ]
-        )
 
-    for group, items in groups.items():
-        selected = items[: limits[group]]
-        if not selected:
-            continue
-        lines.extend([f"## {group}", ""])
-        for idx, paper in enumerate(selected, 1):
-            lines.extend(
-                [
-                    f"### {idx}. {paper.title}",
-                    "",
-                    f"- Authors: {paper.authors}",
-                    f"- Date: {paper.date or 'Unknown'}",
-                    f"- Source: {paper.source}" + (f" / {paper.venue}" if paper.venue else ""),
-                    f"- Link: {paper.url or 'No link available'}",
-                    f"- DOI: {paper.doi or 'Not available'}",
-                    f"- Method type: {classify(paper)}",
-                    f"- Why it matters for DSR: {why_dsr(paper)}",
-                    f"- Summary: {summarize(paper.abstract)}",
-                    f"- Tags: {', '.join(tags_for(paper))}",
-                    "",
-                ]
-            )
+    if latest:
+        lines.extend(["## 1. Latest IS Papers", ""])
+        for paper in latest:
+            lines.extend(paper_block(paper, include_domain=True))
 
-    lines.extend(["## Recent High-Value DSR Reading", ""])
-    selected_readings = select_high_value_readings(groups, high_value_readings)
-    if not selected_readings:
-        lines.extend(
-            [
-                "No suitable recent high-value DSR readings were found in the metadata scan today.",
-                "",
-            ]
-        )
-    for idx, paper in enumerate(selected_readings, 1):
-        lines.extend(
-            [
-                f"### {idx}. {paper.title}",
-                "",
-                f"- Authors: {paper.authors}",
-                f"- Date: {paper.date or 'Unknown'}",
-                f"- Source: {paper.source}" + (f" / {paper.venue}" if paper.venue else ""),
-                f"- Link: {paper.url or 'No link available'}",
-                f"- DOI: {paper.doi or 'Not available'}",
-                f"- Citation signal: {paper.cited_by_count} OpenAlex citations",
-                f"- Why it is worth reading now: {why_dsr(paper)}",
-                f"- DSR lesson to extract: {reading_lesson(paper)}",
-                f"- Connection to today's briefing: {reading_connection(paper, groups)}",
-                f"- Summary: {summarize(paper.abstract)}",
-                "",
-            ]
-        )
-
-    lines.extend(["## Emerging Opportunities for DSR", ""])
-    lines.extend(opportunities(groups))
-    lines.extend(["", "## Recommended Reading Priority", ""])
-    top = (groups["Design Science Research"] or sorted(papers, key=score, reverse=True))[:1]
-    if top:
-        lines.append(f"Read first: **{top[0].title}**")
+    lines.extend(["## 2. Recent High-Value DSR + AI/ML Papers", ""])
+    if high_value:
+        for paper in high_value:
+            lines.extend(paper_block(paper, include_citations=True))
     else:
-        lines.append("No papers were retrieved today. Check source/API availability.")
+        lines.extend(["No strong matches found today.", ""])
+
+    lines.extend(["## 3. Recent IS Conference DSR + AI/ML Papers", ""])
+    if conferences:
+        for paper in conferences:
+            lines.extend(paper_block(paper, include_citations=True))
+    else:
+        lines.extend(["No strong conference matches found in the last three months.", ""])
+
+    lines.extend(["## Highlight Summary", ""])
+    lines.extend(highlight_summary(sections))
     lines.append("")
     return "\n".join(lines)
-
-
-def why_dsr(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract}".lower()
-    if any(term in text for term in ["prototype", "artifact", "artefact", "tool", "system"]):
-        return "It appears to involve an artifact, tool, prototype, or system that can inform build-and-evaluate DSR work."
-    if any(term in text for term in ["design principle", "framework", "method", "design theory"]):
-        return "It appears to contribute design knowledge, principles, frameworks, methods, or theory."
-    if any(term in text for term in ["decision support", "human-ai", "generative ai", "platform"]):
-        return "It points to a sociotechnical design setting where new IS artifacts or design principles may be developed."
-    return "It is adjacent to IS design questions and may suggest artifact requirements, evaluation settings, or design implications."
-
-
-def tags_for(paper: Paper) -> list[str]:
-    text = f"{paper.title} {paper.abstract}".lower()
-    candidates = {
-        "DSR": DSR_TERMS,
-        "AI": ["ai", "artificial intelligence", "generative ai", "machine learning", "algorithm"],
-        "Human-AI": ["human-ai", "human ai", "collaboration", "trust"],
-        "Platforms": ["platform", "ecosystem"],
-        "Decision Support": ["decision support", "decision aid"],
-        "Health IT": ["health", "clinical", "medical"],
-        "Security/Privacy": ["privacy", "security", "cybersecurity"],
-        "Empirical": EMPIRICAL_TERMS,
-        "Behavioral": BEHAVIORAL_TERMS,
-    }
-    tags = [label for label, terms in candidates.items() if any(term in text for term in terms)]
-    return tags[:6] or ["Information Systems"]
-
-
-def opportunities(groups: dict[str, list[Paper]]) -> list[str]:
-    all_text = " ".join(p.title + " " + p.abstract for papers in groups.values() for p in papers).lower()
-    ideas = []
-    if "generative ai" in all_text or "large language model" in all_text:
-        ideas.append("- Design and evaluate organizational GenAI artifacts with explicit human oversight, task fit, and governance mechanisms.")
-    if "privacy" in all_text or "security" in all_text:
-        ideas.append("- Build privacy/security decision aids that translate technical risk signals into managerially actionable interventions.")
-    if "platform" in all_text:
-        ideas.append("- Develop design principles for platform governance artifacts that balance complementor autonomy, data access, and ecosystem control.")
-    if "health" in all_text or "clinical" in all_text:
-        ideas.append("- Instantiate health IT artifacts that integrate workflow fit, explainability, and longitudinal evaluation in real clinical settings.")
-    while len(ideas) < 3:
-        ideas.append("- Convert adjacent empirical findings into testable design requirements, then evaluate artifact utility in field or simulation settings.")
-    return ideas[:3]
-
-
-def select_high_value_readings(
-    groups: dict[str, list[Paper]], readings: list[Paper], count: int = 3
-) -> list[Paper]:
-    briefing_text = " ".join(
-        paper.title + " " + paper.abstract + " " + paper.venue
-        for papers in groups.values()
-        for paper in papers[:6]
-    ).lower()
-    scored: list[tuple[int, Paper]] = []
-    for paper in readings:
-        text = f"{paper.title} {paper.abstract} {paper.venue}".lower()
-        overlap = sum(term in briefing_text and term in text for term in [*DSR_TERMS, *BEHAVIORAL_TERMS])
-        citation_signal = min(paper.cited_by_count // 25, 12)
-        recency_signal = 4 if paper.date >= "2021" else 2
-        scored.append((score(paper) + overlap * 6 + citation_signal + recency_signal, paper))
-    ranked = [paper for _, paper in sorted(scored, key=lambda item: item[0], reverse=True)]
-    return ranked[:count]
-
-
-def reading_connection(paper: Paper, groups: dict[str, list[Paper]]) -> str:
-    tags = [tag.lower() for tag in tags_for(paper)]
-    recent = [
-        item
-        for papers in groups.values()
-        for item in papers[:4]
-        if any(tag in f"{item.title} {item.abstract}".lower() for tag in tags)
-    ]
-    if recent:
-        return f"Most relevant to: {recent[0].title}"
-    return "Use it as a recent benchmark for framing artifact novelty, evaluation, and design knowledge in today's DSR opportunities."
-
-
-def reading_lesson(paper: Paper) -> str:
-    text = f"{paper.title} {paper.abstract}".lower()
-    if "design principle" in text or "design theory" in text:
-        return "Study how the paper converts problem context and evaluation evidence into reusable design principles or design theory."
-    if "prototype" in text or "artifact" in text or "tool" in text:
-        return "Study how the artifact is scoped, instantiated, evaluated, and connected back to IS knowledge contribution."
-    if "human-ai" in text or "generative ai" in text or "artificial intelligence" in text:
-        return "Study how AI capability is translated into a sociotechnical artifact rather than treated as a standalone model."
-    if "platform" in text:
-        return "Study how platform rules, complements, governance, and user behavior become design variables."
-    return "Study the paper as a recent example of turning IS problems into design requirements, evaluation criteria, and reusable design knowledge."
 
 
 def send_email(markdown: str) -> None:
@@ -582,7 +525,7 @@ def send_email(markdown: str) -> None:
 
     today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     message = EmailMessage()
-    message["Subject"] = f"Daily IS Design Science Briefing - {today}"
+    message["Subject"] = f"Daily IS Paper Briefing - {today}"
     message["From"] = mail_from
     message["To"] = ", ".join(recipients)
     message.set_content(markdown)
@@ -620,9 +563,7 @@ def markdown_to_html(markdown: str) -> str:
 
 
 def main() -> None:
-    papers = dedupe([*search_openalex(), *search_arxiv(), *search_crossref()])
-    high_value_readings = search_high_value_readings()
-    markdown = build_markdown(papers, high_value_readings)
+    markdown = build_markdown()
     print(markdown)
     send_email(markdown)
 
