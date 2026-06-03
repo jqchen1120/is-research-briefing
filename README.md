@@ -2,7 +2,7 @@
 
 This GitHub Actions workflow sends a daily Information Systems research briefing at 10:00 Asia/Shanghai.
 
-The IS briefing is intentionally concise. Each paper includes authors, date, link, a fuller abstract, keywords, and method.
+The IS briefing is intentionally concise. Each paper includes authors, date, link, a concise abstract-style summary, and keywords.
 
 The IS briefing separates papers into:
 
@@ -44,7 +44,7 @@ You can also run it manually from `Actions -> Daily IS Design Science Briefing -
 
 ## AI Paper Inspiration Briefing
 
-The second workflow sends a broader AI paper briefing at 10:30 Asia/Shanghai. Each paper includes authors, date, link, a fuller abstract, keywords, method, and a quality signal. It mixes:
+The second workflow sends a broader AI paper briefing at 10:30 Asia/Shanghai. Each paper includes authors, date, link, a concise abstract-style summary, keywords, and a quality signal. It mixes:
 
 - Fresh arXiv papers, selected by topic relevance plus notable author/lab/company signals.
 - Trending recent AI papers and topics, using citation signal where available.

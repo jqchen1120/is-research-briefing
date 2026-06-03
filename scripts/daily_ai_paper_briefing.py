@@ -352,10 +352,14 @@ def keywords(paper: Paper) -> list[str]:
 def abstract_short(paper: Paper, limit: int = 650) -> str:
     abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
     if not abstract:
-        return "No abstract in metadata."
-    if len(abstract) <= limit:
-        return abstract
-    return abstract[:limit].rsplit(" ", 1)[0] + "..."
+        return f"This paper studies {paper.title}. {method_summary(paper)}"
+    return f"{method_summary(paper)} Core content: {first_sentences(abstract, max_sentences=2)}"
+
+
+def first_sentences(text: str, max_sentences: int = 2) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    selected = [sentence.strip() for sentence in sentences if sentence.strip()][:max_sentences]
+    return " ".join(selected)
 
 
 def method_summary(paper: Paper) -> str:
@@ -421,7 +425,6 @@ def paper_block(paper: Paper, fresh: bool = False, include_citations: bool = Tru
         [
             f"- Abstract: {abstract_short(paper)}",
             f"- Keywords: {', '.join(keywords(paper))}",
-            f"- Method: {method_summary(paper)}",
             f"- Quality signal: {quality_signal(paper, fresh=fresh)}",
             "",
         ]

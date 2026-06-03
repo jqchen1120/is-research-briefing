@@ -46,40 +46,27 @@ IS_CONFERENCES = [
 DAILY_IS_QUERIES = [
     "MIS Quarterly",
     "Information Systems Research",
-    "Management Science information systems",
     "Journal of Management Information Systems",
-    "Journal of the Association for Information Systems",
-    "Decision Support Systems information systems",
-    "Information & Management information systems",
-    "International Conference on Information Systems",
-    "European Conference on Information Systems",
-    "Pacific Asia Conference on Information Systems",
-    "Hawaii International Conference on System Sciences information systems",
-    "information systems digital transformation",
-    "information systems artificial intelligence",
-    "information systems platform",
-    "information systems decision support",
+]
+
+IS_JOURNAL_ISSNS = [
+    ("MIS Quarterly", "0276-7783"),
+    ("Information Systems Research", "1047-7047"),
+    ("Journal of Management Information Systems", "0742-1222"),
 ]
 
 DSR_AI_QUERIES = [
     "design science artificial intelligence information systems",
     "machine learning decision support information systems",
-    "deep learning decision support system information systems",
-    "AI artifact design science information systems",
-    "human AI collaboration design science information systems",
     "generative AI artifact information systems",
-    "data analytics artifact design science information systems",
     "algorithmic decision support design science information systems",
-    "health information technology AI design science",
-    "cybersecurity privacy AI tool design science information systems",
 ]
 
 DSR_AI_CONFERENCE_QUERIES = [
-    f"{conference} artificial intelligence design science"
-    for conference in IS_CONFERENCES
-] + [
-    f"{conference} machine learning decision support"
-    for conference in IS_CONFERENCES
+    "ICIS artificial intelligence design science",
+    "ECIS machine learning decision support",
+    "PACIS generative AI information systems",
+    "HICSS AI decision support information systems",
 ]
 
 AI_ML_TERMS = [
@@ -171,7 +158,7 @@ def is_future_date(value: str) -> bool:
     return bool(value and value[:10] > today_utc())
 
 
-def fetch_json(url: str, timeout: int = 12) -> dict:
+def fetch_json(url: str, timeout: int = 5) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/2.0"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -225,8 +212,7 @@ def search_openalex(
     module_hint: str = "",
 ) -> list[Paper]:
     filters = [f"from_publication_date:{from_date}"]
-    if to_date:
-        filters.append(f"to_publication_date:{to_date}")
+    filters.append(f"to_publication_date:{to_date or today_utc()}")
     params = {
         "search": query,
         "filter": ",".join(filters),
@@ -246,10 +232,34 @@ def search_openalex(
     return [paper for paper in papers if paper]
 
 
+def search_openalex_issn(venue_name: str, issn: str, from_date: str, per_page: int = 5) -> list[Paper]:
+    filters = [
+        f"primary_location.source.issn:{issn}",
+        f"from_publication_date:{from_date}",
+        f"to_publication_date:{today_utc()}",
+    ]
+    params = {
+        "filter": ",".join(filters),
+        "sort": "publication_date:desc",
+        "per-page": str(per_page),
+    }
+    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
+    if mailto:
+        params["mailto"] = mailto
+    url = "https://api.openalex.org/works?" + urllib.parse.urlencode(params)
+    try:
+        data = fetch_json(url)
+    except Exception as exc:
+        print(f"OpenAlex ISSN query failed for {venue_name!r}: {exc}", file=sys.stderr)
+        return []
+    papers = [paper_from_openalex(item, "Latest IS papers") for item in data.get("results", [])]
+    return [paper for paper in papers if paper and not is_editorial(paper)]
+
+
 def search_daily_is() -> list[Paper]:
     papers: list[Paper] = []
-    for query in DAILY_IS_QUERIES:
-        papers.extend(search_openalex(query, cutoff(365), per_page=5, module_hint="Latest IS papers"))
+    for venue_name, issn in IS_JOURNAL_ISSNS:
+        papers.extend(search_openalex_issn(venue_name, issn, cutoff(730), per_page=5))
     candidates = dedupe(papers)
     filtered = filter_relevant_is(candidates)
     if filtered:
@@ -257,6 +267,11 @@ def search_daily_is() -> list[Paper]:
     if candidates:
         return candidates
     return search_openalex("information systems", cutoff(730), per_page=15, module_hint="Latest IS papers")
+
+
+def is_editorial(paper: Paper) -> bool:
+    title = paper.title.lower()
+    return any(marker in title for marker in ["editor's comments", "editor’s comments", "editorial", "call for papers", "erratum", "corrigendum"])
 
 
 def search_recent_high_value_dsr_ai() -> list[Paper]:
@@ -379,10 +394,14 @@ def keywords(paper: Paper) -> list[str]:
 def abstract_short(paper: Paper, limit: int = 650) -> str:
     abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
     if not abstract:
-        return "No abstract in metadata."
-    if len(abstract) <= limit:
-        return abstract
-    return abstract[:limit].rsplit(" ", 1)[0] + "..."
+        return f"This paper studies {paper.title}. {method_summary(paper)}"
+    return f"{method_summary(paper)} Core content: {first_sentences(abstract, max_sentences=2)}"
+
+
+def first_sentences(text: str, max_sentences: int = 2) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    selected = [sentence.strip() for sentence in sentences if sentence.strip()][:max_sentences]
+    return " ".join(selected)
 
 
 def method_summary(paper: Paper) -> str:
@@ -451,7 +470,6 @@ def paper_block(paper: Paper, include_domain: bool = False, include_citations: b
         [
             f"- Abstract: {abstract_short(paper)}",
             f"- Keywords: {', '.join(keywords(paper))}",
-            f"- Method: {method_summary(paper)}",
             "",
         ]
     )
