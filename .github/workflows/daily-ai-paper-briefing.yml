@@ -20,6 +20,23 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate email secrets
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          missing=0
+          for name in SMTP_HOST SMTP_USERNAME SMTP_PASSWORD MAIL_FROM MAIL_TO; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is missing or empty. Add it in Settings -> Secrets and variables -> Actions -> Repository secrets."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Generate and email AI paper briefing
         env:
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -30,4 +47,3 @@ jobs:
           MAIL_TO: ${{ secrets.MAIL_TO }}
           OPENALEX_MAILTO: ${{ secrets.OPENALEX_MAILTO }}
         run: python scripts/daily_ai_paper_briefing.py
-

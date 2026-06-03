@@ -154,6 +154,10 @@ def cutoff(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
 
 
+def is_future_date(value: str) -> bool:
+    return bool(value and value[:10] > datetime.now(timezone.utc).date().isoformat())
+
+
 def inverted_index_to_text(index: dict[str, list[int]]) -> str:
     if not index:
         return ""
@@ -180,7 +184,11 @@ def search_openalex_topic(module: str, query: str, days: int = 21, per_page: int
     except Exception as exc:
         print(f"OpenAlex query failed for {query!r}: {exc}", file=sys.stderr)
         return []
-    return [paper_from_openalex(item, module) for item in data.get("results", []) if item.get("title")]
+    return [
+        paper_from_openalex(item, module)
+        for item in data.get("results", [])
+        if item.get("title") and not is_future_date(clean_text(item.get("publication_date", "")))
+    ]
 
 
 def search_openalex_hot(days: int = 180) -> list[Paper]:
@@ -201,7 +209,11 @@ def search_openalex_hot(days: int = 180) -> list[Paper]:
         except Exception as exc:
             print(f"OpenAlex hot query failed for {query!r}: {exc}", file=sys.stderr)
             continue
-        papers.extend(paper_from_openalex(item, "Trending / Highly Cited Recent") for item in data.get("results", []) if item.get("title"))
+        papers.extend(
+            paper_from_openalex(item, "Trending / Highly Cited Recent")
+            for item in data.get("results", [])
+            if item.get("title") and not is_future_date(clean_text(item.get("publication_date", "")))
+        )
     return papers
 
 
@@ -213,6 +225,7 @@ def search_openalex_authors(days: int = 365) -> list[Paper]:
 
 
 def paper_from_openalex(item: dict, module: str) -> Paper:
+    publication_date = clean_text(item.get("publication_date", ""))
     authors = ", ".join(
         clean_text(a.get("author", {}).get("display_name", ""))
         for a in item.get("authorships", [])[:6]
@@ -233,7 +246,7 @@ def paper_from_openalex(item: dict, module: str) -> Paper:
     return Paper(
         title=clean_text(item.get("title", "")),
         authors=authors or "Unknown authors",
-        date=clean_text(item.get("publication_date", "")),
+        date=publication_date,
         source="OpenAlex",
         url=item.get("doi") or item.get("id") or "",
         abstract=abstract,
@@ -275,6 +288,8 @@ def search_arxiv() -> list[Paper]:
                 for a in entry.findall("atom:author", ns)[:6]
             )
             published = clean_text(entry.findtext("atom:published", default="", namespaces=ns))[:10]
+            if is_future_date(published):
+                continue
             link = clean_text(entry.findtext("atom:id", default="", namespaces=ns))
             if title:
                 papers.append(Paper(title, authors or "Unknown authors", published, "arXiv", link, abstract, "arXiv", module_hint="Fresh arXiv"))
@@ -312,6 +327,8 @@ def search_crossref() -> list[Paper]:
                 or [[]]
             )
             date = "-".join(str(x) for x in date_parts[0]) if date_parts and date_parts[0] else ""
+            if is_future_date(date):
+                continue
             venue = clean_text(" ".join(item.get("container-title", [])[:1]))
             doi = clean_text(item.get("DOI", ""))
             papers.append(

@@ -140,6 +140,10 @@ def recent_cutoff(days: int = 14) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
 
 
+def is_future_date(value: str) -> bool:
+    return bool(value and value[:10] > datetime.now(timezone.utc).date().isoformat())
+
+
 def search_openalex() -> list[Paper]:
     papers: list[Paper] = []
     mailto = os.getenv("OPENALEX_MAILTO", "").strip()
@@ -162,6 +166,9 @@ def search_openalex() -> list[Paper]:
             title = clean_text(item.get("title", ""))
             if not title:
                 continue
+            publication_date = clean_text(item.get("publication_date", ""))
+            if is_future_date(publication_date):
+                continue
             authors = ", ".join(
                 clean_text(a.get("author", {}).get("display_name", ""))
                 for a in item.get("authorships", [])[:6]
@@ -176,7 +183,7 @@ def search_openalex() -> list[Paper]:
                 Paper(
                     title=title,
                     authors=authors or "Unknown authors",
-                    date=clean_text(item.get("publication_date", "")),
+                    date=publication_date,
                     source="OpenAlex",
                     url=item.get("doi") or item.get("id") or "",
                     abstract=abstract,
@@ -211,6 +218,9 @@ def search_high_value_readings() -> list[Paper]:
             title = clean_text(item.get("title", ""))
             if not title:
                 continue
+            publication_date = clean_text(item.get("publication_date", ""))
+            if is_future_date(publication_date):
+                continue
             authors = ", ".join(
                 clean_text(a.get("author", {}).get("display_name", ""))
                 for a in item.get("authorships", [])[:6]
@@ -224,7 +234,7 @@ def search_high_value_readings() -> list[Paper]:
             paper = Paper(
                 title=title,
                 authors=authors or "Unknown authors",
-                date=clean_text(item.get("publication_date", "")),
+                date=publication_date,
                 source="OpenAlex",
                 url=item.get("doi") or item.get("id") or "",
                 abstract=abstract,
@@ -311,6 +321,8 @@ def search_crossref() -> list[Paper]:
                 or [[]]
             )
             date = "-".join(str(x) for x in date_parts[0]) if date_parts and date_parts[0] else ""
+            if is_future_date(date):
+                continue
             venue = clean_text(" ".join(item.get("container-title", [])[:1]))
             doi = clean_text(item.get("DOI", ""))
             papers.append(
