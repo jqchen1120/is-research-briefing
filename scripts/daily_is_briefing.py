@@ -100,6 +100,36 @@ DSR_TERMS = [
     "framework",
 ]
 
+STRICT_DSR_TERMS = [
+    "design science",
+    "action design research",
+    "artifact",
+    "artefact",
+    "prototype",
+    "design principle",
+    "design theory",
+    "design evaluation",
+    "build and evaluate",
+    "instantiation",
+]
+
+IS_CONFERENCE_MARKERS = [
+    "international conference on information systems",
+    "european conference on information systems",
+    "pacific asia conference on information systems",
+    "hawaii international conference on system sciences",
+    "americas conference on information systems",
+    "conference on information systems and technology",
+    "workshop on information systems and economics",
+    "icis",
+    "ecis",
+    "pacis",
+    "hicss",
+    "amcis",
+    "cist",
+    "wise",
+]
+
 BEHAVIORAL_TERMS = [
     "behavior",
     "behaviour",
@@ -276,6 +306,8 @@ def is_editorial(paper: Paper) -> bool:
 
 def search_recent_high_value_dsr_ai() -> list[Paper]:
     papers: list[Paper] = []
+    for venue_name, issn in IS_JOURNAL_ISSNS:
+        papers.extend(search_openalex_issn(venue_name, issn, years_ago(3), per_page=10))
     for query in DSR_AI_QUERIES:
         papers.extend(
             search_openalex(
@@ -286,11 +318,9 @@ def search_recent_high_value_dsr_ai() -> list[Paper]:
                 module_hint="Recent high-value DSR + AI/ML",
             )
         )
-    return [
-        paper
-        for paper in dedupe(papers)
-        if is_ai_dsr(paper) and venue_priority(paper.venue) > 0
-    ]
+    candidates = [paper for paper in dedupe(papers) if is_ai_or_dsr_related(paper)]
+    preferred = [paper for paper in candidates if venue_priority(paper.venue) > 0]
+    return preferred or candidates
 
 
 def search_recent_conference_dsr_ai() -> list[Paper]:
@@ -305,11 +335,24 @@ def search_recent_conference_dsr_ai() -> list[Paper]:
                 module_hint="Recent IS conference DSR + AI/ML",
             )
         )
-    return [
-        paper
-        for paper in dedupe(papers)
-        if is_ai_dsr(paper) and is_conference_like(paper)
-    ]
+    candidates = [paper for paper in dedupe(papers) if is_ai_or_dsr_related(paper) and is_is_related(paper)]
+    conference = [paper for paper in candidates if is_conference_like(paper)]
+    if conference:
+        return conference
+
+    fallback: list[Paper] = []
+    for query in DSR_AI_CONFERENCE_QUERIES:
+        fallback.extend(
+            search_openalex(
+                query,
+                cutoff(365),
+                sort="publication_date:desc",
+                per_page=6,
+                module_hint="Recent IS conference DSR + AI/ML",
+            )
+        )
+    fallback_candidates = [paper for paper in dedupe(fallback) if is_ai_or_dsr_related(paper) and is_is_related(paper)]
+    return [paper for paper in fallback_candidates if is_conference_like(paper)]
 
 
 def filter_relevant_is(papers: list[Paper]) -> list[Paper]:
@@ -339,6 +382,22 @@ def is_ai_dsr(paper: Paper) -> bool:
     )
 
 
+def is_ai_or_dsr_related(paper: Paper) -> bool:
+    text = paper_text(paper)
+    return contains_any(text, AI_ML_TERMS) or contains_any(text, STRICT_DSR_TERMS) or "decision support" in text
+
+
+def is_is_related(paper: Paper) -> bool:
+    text = paper_text(paper)
+    return (
+        "information systems" in text
+        or "mis quarterly" in paper.venue.lower()
+        or "information systems research" in paper.venue.lower()
+        or "journal of management information systems" in paper.venue.lower()
+        or any(marker in text for marker in IS_CONFERENCE_MARKERS)
+    )
+
+
 def venue_priority(venue: str) -> int:
     lowered = venue.lower()
     if any(name.lower() in lowered for name in FIRST_TIER_JOURNALS):
@@ -352,43 +411,38 @@ def venue_priority(venue: str) -> int:
 
 def is_conference_like(paper: Paper) -> bool:
     text = f"{paper.venue} {paper.title}".lower()
-    return any(name.lower() in text for name in IS_CONFERENCES) or "conference" in text or "proceedings" in text
+    return any(marker in text for marker in IS_CONFERENCE_MARKERS)
 
 
 def classify_domain(paper: Paper) -> str:
     text = paper_text(paper)
-    labels = []
-    if contains_any(text, DSR_TERMS):
-        labels.append("design")
-    if contains_any(text, AI_ML_TERMS):
-        labels.append("ai/ml")
-    if contains_any(text, MODELING_TERMS):
-        labels.append("modeling")
+    if contains_any(text, STRICT_DSR_TERMS):
+        return "Design Science"
+    if contains_any(text, MODELING_TERMS) or contains_any(text, AI_ML_TERMS):
+        return "Modeling"
     if contains_any(text, BEHAVIORAL_TERMS):
-        labels.append("behavioral")
-    if "platform" in text:
-        labels.append("platform")
-    if "health" in text or "clinical" in text:
-        labels.append("health it")
-    if "security" in text or "privacy" in text or "cyber" in text:
-        labels.append("security/privacy")
-    return ", ".join(dict.fromkeys(labels)) or "general IS"
+        return "Behavioral"
+    if any(term in text for term in ["data", "evidence", "estimate", "effect", "interview", "case study"]):
+        return "Empirical"
+    return "General IS"
 
 
 def keywords(paper: Paper) -> list[str]:
     text = paper_text(paper)
     candidates = {
-        "DSR": DSR_TERMS,
-        "AI/ML": AI_ML_TERMS,
-        "Modeling": MODELING_TERMS,
-        "Behavioral": BEHAVIORAL_TERMS,
-        "Decision support": ["decision support", "decision aid"],
-        "Platform": ["platform", "ecosystem"],
-        "Health IT": ["health", "clinical", "medical"],
-        "Security/privacy": ["security", "privacy", "cybersecurity"],
+        "method: design science": STRICT_DSR_TERMS,
+        "method: AI/ML": AI_ML_TERMS,
+        "method: modeling": MODELING_TERMS,
+        "method: behavioral study": BEHAVIORAL_TERMS,
+        "background: decision support": ["decision support", "decision aid"],
+        "background: platform": ["platform", "ecosystem"],
+        "background: health IT": ["health", "clinical", "medical"],
+        "background: security/privacy": ["security", "privacy", "cybersecurity"],
+        "background: social media": ["social media", "online reviews", "twitter"],
+        "background: digital transformation": ["digital transformation", "digitalization"],
     }
     tags = [label for label, terms in candidates.items() if contains_any(text, terms)]
-    return tags[:6] or ["Information Systems"]
+    return tags[:4] or ["background: information systems"]
 
 
 def abstract_short(paper: Paper, limit: int = 650) -> str:

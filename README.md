@@ -11,6 +11,8 @@ The IS briefing separates papers into:
 - Recent IS conference DSR + AI/ML papers from the last three months for broader ideation.
 - Highlight summary after all search modules.
 
+The `Field` label is a single coarse type such as `Design Science`, `Modeling`, `Behavioral`, `Empirical`, or `General IS`. Keywords are split into method/background signals.
+
 ## Setup
 
 1. Create a GitHub repository and push this folder to it.
