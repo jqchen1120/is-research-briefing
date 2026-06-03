@@ -168,11 +168,9 @@ def search_openalex() -> list[Paper]:
                 if a.get("author")
             )
             abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
-            source = clean_text(
-                (item.get("primary_location") or {})
-                .get("source", {})
-                .get("display_name", "")
-            )
+            primary_location = item.get("primary_location") or {}
+            source_obj = primary_location.get("source") or {}
+            source = clean_text(source_obj.get("display_name", ""))
             doi = clean_text(item.get("doi", ""))
             papers.append(
                 Paper(
@@ -219,11 +217,9 @@ def search_high_value_readings() -> list[Paper]:
                 if a.get("author")
             )
             abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
-            source = clean_text(
-                (item.get("primary_location") or {})
-                .get("source", {})
-                .get("display_name", "")
-            )
+            primary_location = item.get("primary_location") or {}
+            source_obj = primary_location.get("source") or {}
+            source = clean_text(source_obj.get("display_name", ""))
             doi = clean_text(item.get("doi", ""))
             paper = Paper(
                 title=title,

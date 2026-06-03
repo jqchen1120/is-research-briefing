@@ -223,7 +223,9 @@ def paper_from_openalex(item: dict, module: str) -> Paper:
         for a in item.get("authorships", [])[:8]
         for i in a.get("institutions", [])[:2]
     )
-    source = clean_text((item.get("primary_location") or {}).get("source", {}).get("display_name", ""))
+    primary_location = item.get("primary_location") or {}
+    source_obj = primary_location.get("source") or {}
+    source = clean_text(source_obj.get("display_name", ""))
     abstract = inverted_index_to_text(item.get("abstract_inverted_index") or {})
     if institutions:
         abstract = f"{abstract} Institutions: {institutions}"
@@ -597,4 +599,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
