@@ -40,16 +40,18 @@ You can also run it manually from `Actions -> Daily IS Design Science Briefing -
 - `.github/workflows/daily-is-briefing.yml`: GitHub Actions schedule and runtime.
 - `scripts/daily_is_briefing.py`: OpenAlex journal metadata lookup, formatting, and email logic.
 - `.github/workflows/daily-ai-paper-briefing.yml`: GitHub Actions schedule for the AI paper inspiration briefing.
-- `scripts/daily_ai_paper_briefing.py`: Searches frontier AI papers across arXiv, OpenAlex, and Crossref, then sends a diverse idea-sparking email.
+- `scripts/daily_ai_paper_briefing.py`: Looks up fresh arXiv AI papers and recent high-citation AI papers from OpenAlex, then emails source metadata.
 
-## AI Paper Inspiration Briefing
+## AI Paper Briefing
 
-The second workflow sends a broader AI paper briefing at 10:37 Asia/Shanghai. Each paper includes authors, date, link, a concise abstract-style summary, keywords, and a quality signal. It mixes:
+The second workflow sends a simple AI paper briefing at 10:37 Asia/Shanghai. It uses source metadata only and does not call an LLM.
 
-- Fresh arXiv papers, selected by topic relevance plus notable author/lab/company signals.
-- Trending recent AI papers and topics, using citation signal where available.
-- Notable author/lab papers.
-- A rotating daily series such as GNN, RL, LLM, RAG, Agents, Multimodal, Efficient Models, or Alignment/Evaluation. This section requires citation signal and mixes classic and frontier must-reads.
+The AI briefing separates papers into:
+
+- Fresh arXiv AI papers: up to 10 recent arXiv papers from AI-related categories such as `cs.AI`, `cs.CL`, `cs.LG`, `cs.CV`, `cs.RO`, and `stat.ML`.
+- Trending AI papers: up to 10 AI-related OpenAlex papers from the last 30 days, sorted by recent citation signal.
+
+Each paper includes title, source/venue, date, citation signal where available, authors, link, source keywords, and source abstract.
 
 ## Notes
 
@@ -57,6 +59,5 @@ The script uses public metadata APIs and standard-library Python only:
 
 - OpenAlex
 - arXiv
-- Crossref
 
 The result quality depends on source metadata freshness. For a production-grade version, add stateful deduplication and authenticated metadata sources.
