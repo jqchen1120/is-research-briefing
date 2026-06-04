@@ -1,16 +1,15 @@
-# Daily IS Design Science Research Briefing
+# Daily IS Journal Paper Briefing
 
 This GitHub Actions workflow sends a daily Information Systems research briefing at 10:07 Asia/Shanghai.
 
-The IS briefing is intentionally concise. Each paper includes authors, date, link, a concise abstract-style summary, and keywords.
+The IS briefing is intentionally simple. It uses OpenAlex metadata only and does not call an LLM.
 
 The IS briefing separates papers into:
 
-- Latest IS papers from core and adjacent IS journals.
-- Recent high-value DSR + AI/ML papers from the last three years, prioritizing ISR, MISQ, and Management Science, then POM, JMIS, JOC, JAIS, DSS, I&M, EJIS, ISJ, JSIS, ISF, IJIM, and other relevant IS journals. This module requires AI/DL method signals plus artifact, decision-support, design, build, or deployment signals.
-- Highlight summary after all search modules.
+- ISR / MISQ / Management Science: up to 10 source-matched journal articles from the last 30 days.
+- Other strong IS journals: up to 10 source-matched journal articles from the last 30 days, including JMIS, JAIS, DSS, I&M, EJIS, ISJ, JSIS, ISF, IJIM, Electronic Markets, Internet Research, Government Information Quarterly, Information Systems, and Journal of Organizational Computing and Electronic Commerce.
 
-Keywords are concise topic or method labels without category prefixes.
+Each paper includes title, journal, date, OpenAlex citation count, authors, link, source keywords, and source abstract. If OpenAlex has no keywords or abstract for a paper, the email says so rather than generating replacements.
 
 ## Setup
 
@@ -39,7 +38,7 @@ You can also run it manually from `Actions -> Daily IS Design Science Briefing -
 ## Files
 
 - `.github/workflows/daily-is-briefing.yml`: GitHub Actions schedule and runtime.
-- `scripts/daily_is_briefing.py`: Search, classify, format, and email logic.
+- `scripts/daily_is_briefing.py`: OpenAlex journal metadata lookup, formatting, and email logic.
 - `.github/workflows/daily-ai-paper-briefing.yml`: GitHub Actions schedule for the AI paper inspiration briefing.
 - `scripts/daily_ai_paper_briefing.py`: Searches frontier AI papers across arXiv, OpenAlex, and Crossref, then sends a diverse idea-sparking email.
 
@@ -60,4 +59,4 @@ The script uses public metadata APIs and standard-library Python only:
 - arXiv
 - Crossref
 
-The result quality depends on source metadata freshness. For a production-grade version, add Semantic Scholar, SSRN, stateful deduplication, and an LLM-based ranking step.
+The result quality depends on source metadata freshness. For a production-grade version, add stateful deduplication and authenticated metadata sources.
