@@ -2,8 +2,8 @@ name: Schedule Smoke Test
 
 on:
   schedule:
-    # Temporary one-time smoke test: 2026-06-04 06:05 UTC = 2026-06-04 14:05 Asia/Shanghai.
-    - cron: "5 6 4 6 *"
+    # Temporary one-time smoke test: 2026-06-04 06:30 UTC = 2026-06-04 14:30 Asia/Shanghai.
+    - cron: "30 6 4 6 *"
   workflow_dispatch:
 
 jobs:
