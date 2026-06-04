@@ -81,6 +81,13 @@ DSR_AI_QUERIES = [
     "recommender system design science information systems",
 ]
 
+SSRN_DSR_AI_QUERIES = [
+    "deep learning decision support information systems",
+    "machine learning decision support information systems",
+    "LLM decision support information systems",
+    "AI-enabled decision support enterprise systems",
+]
+
 AI_ML_TERMS = [
     "artificial intelligence",
     "machine learning",
@@ -114,6 +121,27 @@ AI_METHOD_TERMS = [
     "recommender",
     "algorithmic",
     "optimization",
+]
+
+DL_METHOD_TERMS = [
+    "machine learning",
+    "deep learning",
+    "neural network",
+    "large language model",
+    "generative ai",
+    "natural language processing",
+    "reinforcement learning",
+    "computer vision",
+    "graph neural",
+    "transformer",
+    "embedding",
+    "representation learning",
+    "classification",
+    "prediction",
+    "predictive model",
+    "recommender",
+    "recommendation",
+    "algorithm",
 ]
 
 DSR_TERMS = [
@@ -167,6 +195,47 @@ AI_DESIGN_TERMS = [
     "deployment",
 ]
 
+AI_DESIGN_STRONG_TERMS = [
+    "artifact",
+    "artefact",
+    "prototype",
+    "decision support",
+    "decision aid",
+    "recommender system",
+    "recommendation system",
+    "predictive model",
+    "prediction model",
+    "classification model",
+    "algorithm design",
+    "model design",
+    "system design",
+    "tool",
+    "build and evaluate",
+    "deployment",
+    "implementation",
+    "intervention",
+    "design science",
+    "design principle",
+]
+
+IS_CONTEXT_TERMS = [
+    "information systems",
+    "management information systems",
+    "decision support systems",
+    "enterprise systems",
+    "digital platform",
+    "digital platforms",
+    "business process",
+    "organizational",
+    "organisation",
+    "enterprise",
+    "operations",
+    "supply chain",
+    "e-commerce",
+    "health it",
+    "fintech",
+]
+
 BEHAVIORAL_TERMS = [
     "behavior",
     "behaviour",
@@ -203,6 +272,7 @@ class Paper:
     doi: str = ""
     cited_by_count: int = 0
     module_hint: str = ""
+    source_keywords: tuple[str, ...] = ()
 
 
 def today_utc() -> str:
@@ -241,6 +311,47 @@ def inverted_index_to_text(index: dict[str, list[int]]) -> str:
     return clean_text(" ".join(word for _, word in sorted(pairs)))
 
 
+def unique_keywords(values: Iterable[str], limit: int = 6) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    blocked = {
+        "information systems",
+        "information system",
+        "computer science",
+        "business",
+        "management science",
+        "social sciences",
+        "article",
+        "research",
+    }
+    for value in values:
+        label = clean_text(value).strip(" .;:,")
+        if not label:
+            continue
+        key = label.lower()
+        if key in seen or key in blocked or len(key) < 3:
+            continue
+        seen.add(key)
+        result.append(label)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def openalex_keywords(item: dict) -> tuple[str, ...]:
+    labels: list[str] = []
+    for keyword in item.get("keywords") or []:
+        labels.append(clean_text(keyword.get("display_name", "")))
+    primary_topic = item.get("primary_topic") or {}
+    labels.append(clean_text(primary_topic.get("display_name", "")))
+    for topic in item.get("topics") or []:
+        labels.append(clean_text(topic.get("display_name", "")))
+    for concept in item.get("concepts") or []:
+        if int(concept.get("level") or 99) <= 2:
+            labels.append(clean_text(concept.get("display_name", "")))
+    return tuple(unique_keywords(labels))
+
+
 def paper_from_openalex(item: dict, module_hint: str) -> Paper | None:
     title = clean_text(item.get("title", ""))
     date = clean_text(item.get("publication_date", ""))
@@ -267,6 +378,7 @@ def paper_from_openalex(item: dict, module_hint: str) -> Paper | None:
         doi=doi,
         cited_by_count=int(item.get("cited_by_count") or 0),
         module_hint=module_hint,
+        source_keywords=openalex_keywords(item),
     )
 
 
@@ -296,6 +408,67 @@ def search_openalex(
         print(f"OpenAlex query failed for {query!r}: {exc}", file=sys.stderr)
         return []
     papers = [paper_from_openalex(item, module_hint) for item in data.get("results", [])]
+    return [paper for paper in papers if paper]
+
+
+def crossref_date(item: dict) -> str:
+    for key in ["published-print", "published-online", "published", "posted", "created", "deposited"]:
+        parts = ((item.get(key) or {}).get("date-parts") or [[]])[0]
+        if parts:
+            year = int(parts[0])
+            month = int(parts[1]) if len(parts) > 1 else 1
+            day = int(parts[2]) if len(parts) > 2 else 1
+            return f"{year:04d}-{month:02d}-{day:02d}"
+    return ""
+
+
+def paper_from_crossref_ssrn(item: dict, module_hint: str) -> Paper | None:
+    title = clean_text(" ".join(item.get("title") or []))
+    date = crossref_date(item)
+    if not title or is_future_date(date):
+        return None
+    authors = ", ".join(
+        clean_text(" ".join(part for part in [author.get("given", ""), author.get("family", "")] if part))
+        for author in item.get("author", [])[:6]
+    )
+    doi = clean_text(item.get("DOI", ""))
+    abstract = clean_text(re.sub(r"<[^>]+>", " ", item.get("abstract", "")))
+    subjects = [clean_text(subject) for subject in item.get("subject", [])]
+    return Paper(
+        title=title,
+        authors=authors or "Unknown authors",
+        date=date,
+        source="SSRN",
+        url=f"https://doi.org/{doi}" if doi else clean_text(item.get("URL", "")),
+        abstract=abstract,
+        venue="SSRN",
+        doi=doi,
+        cited_by_count=int(item.get("is-referenced-by-count") or 0),
+        module_hint=module_hint,
+        source_keywords=tuple(unique_keywords(subjects)),
+    )
+
+
+def search_ssrn_crossref(query: str, from_date: str, per_page: int = 8) -> list[Paper]:
+    filters = [f"from-pub-date:{from_date}", f"until-pub-date:{today_utc()}", "prefix:10.2139"]
+    params = {
+        "query.bibliographic": query,
+        "filter": ",".join(filters),
+        "sort": "published",
+        "order": "desc",
+        "rows": str(per_page),
+    }
+    mailto = os.getenv("OPENALEX_MAILTO", "").strip()
+    if mailto:
+        params["mailto"] = mailto
+    url = "https://api.crossref.org/works?" + urllib.parse.urlencode(params)
+    try:
+        data = fetch_json(url, timeout=8)
+    except Exception as exc:
+        print(f"Crossref SSRN query failed for {query!r}: {exc}", file=sys.stderr)
+        return []
+    items = (data.get("message") or {}).get("items", [])
+    papers = [paper_from_crossref_ssrn(item, "Recent high-value DSR + AI/ML") for item in items]
     return [paper for paper in papers if paper]
 
 
@@ -372,10 +545,12 @@ def search_recent_high_value_dsr_ai() -> list[Paper]:
                 module_hint="Recent high-value DSR + AI/ML",
             )
         )
+    for query in SSRN_DSR_AI_QUERIES:
+        papers.extend(search_ssrn_crossref(query, years_ago(3), per_page=6))
     return [
         paper
         for paper in dedupe(papers)
-        if venue_priority(paper.venue) > 0 and is_dsr_ai_method_paper(paper)
+        if is_dsr_ai_source_candidate(paper) and is_dsr_ai_method_paper(paper)
     ]
 
 
@@ -413,13 +588,20 @@ def is_ai_or_dsr_related(paper: Paper) -> bool:
 
 def is_dsr_ai_method_paper(paper: Paper) -> bool:
     text = paper_text(paper)
-    has_ai_method = contains_any(text, AI_METHOD_TERMS)
-    has_design_context = contains_any(text, AI_DESIGN_TERMS)
+    has_ai_method = contains_any(text, DL_METHOD_TERMS)
+    has_design_context = contains_any(text, AI_DESIGN_STRONG_TERMS)
     behavioral_only = (
-        contains_any(text, ["adoption", "acceptance", "intention", "perception", "attitude", "trust"])
-        and not contains_any(text, ["decision support", "artifact", "prototype", "system", "tool", "model"])
+        contains_any(text, ["adoption", "acceptance", "intention", "perception", "attitude", "trust", "continuance"])
+        and not contains_any(text, ["decision support", "artifact", "prototype", "recommender", "predictive model", "classification model"])
     )
     return has_ai_method and has_design_context and not behavioral_only
+
+
+def is_dsr_ai_source_candidate(paper: Paper) -> bool:
+    if venue_priority(paper.venue) > 0:
+        return True
+    text = paper_text(paper)
+    return paper.source == "SSRN" and contains_any(text, IS_CONTEXT_TERMS)
 
 
 def is_is_related(paper: Paper) -> bool:
@@ -444,34 +626,157 @@ def venue_priority(venue: str) -> int:
 
 
 def keywords(paper: Paper) -> list[str]:
+    if paper.source_keywords:
+        return unique_keywords(paper.source_keywords, limit=6)
     text = paper_text(paper)
-    candidates = {
-        "design science": STRICT_DSR_TERMS,
-        "AI/ML": AI_ML_TERMS,
-        "modeling": MODELING_TERMS,
-        "behavioral study": BEHAVIORAL_TERMS,
-        "decision support": ["decision support", "decision aid"],
-        "platform": ["platform", "ecosystem"],
-        "health IT": ["health", "clinical", "medical"],
-        "security/privacy": ["security", "privacy", "cybersecurity"],
-        "social media": ["social media", "online reviews", "twitter"],
-        "digital transformation": ["digital transformation", "digitalization"],
+    explicit_phrases = extract_candidate_phrases(text)
+    candidates = [
+        "artificial intelligence",
+        "deep learning",
+        "machine learning",
+        "large language model",
+        "generative AI",
+        "decision support",
+        "AI adoption",
+        "user trust",
+        "design science",
+        "artifact design",
+        "predictive model",
+        "recommender system",
+        "digital platform",
+        "health IT",
+        "privacy",
+        "cybersecurity",
+        "social media",
+        "digital transformation",
+        "human-AI collaboration",
+    ]
+    tags = [label for label in candidates if label.lower() in text]
+    title_terms = [
+        phrase
+        for phrase in re.findall(r"\b[A-Za-z][A-Za-z-]*(?:\s+[A-Za-z][A-Za-z-]*){1,2}\b", paper.title)
+        if not phrase.lower().endswith(" in")
+    ]
+    return unique_keywords([*tags, *explicit_phrases, *title_terms], limit=6) or ["IS research"]
+
+
+def extract_candidate_phrases(text: str) -> list[str]:
+    stop = {
+        "this paper",
+        "the paper",
+        "we propose",
+        "we develop",
+        "we design",
+        "we examine",
+        "we study",
+        "our study",
+        "our results",
+        "the results",
+        "information systems",
+        "research paper",
     }
-    tags = [label for label, terms in candidates.items() if contains_any(text, terms)]
-    return tags[:4] or ["information systems"]
+    phrases = re.findall(r"\b[a-z][a-z-]{3,}(?:\s+[a-z][a-z-]{3,}){1,2}\b", text)
+    scored: list[tuple[int, str]] = []
+    for phrase in phrases:
+        phrase = phrase.strip()
+        if phrase in stop:
+            continue
+        score = 0
+        if contains_any(phrase, DL_METHOD_TERMS):
+            score += 4
+        if contains_any(phrase, AI_DESIGN_STRONG_TERMS):
+            score += 3
+        if contains_any(phrase, IS_CONTEXT_TERMS):
+            score += 2
+        if score:
+            scored.append((score, phrase))
+    return [phrase for _, phrase in sorted(scored, reverse=True)]
 
 
-def abstract_short(paper: Paper, limit: int = 650) -> str:
+def abstract_short(paper: Paper, limit: int = 850) -> str:
     abstract = clean_text(re.sub(r"<[^>]+>", " ", paper.abstract))
     if not abstract:
         return f"This paper studies {paper.title}. {method_summary(paper)}"
-    return f"{method_summary(paper)} Core content: {first_sentences(abstract, max_sentences=2)}"
+    sentences = split_sentences(abstract)
+    background = pick_sentence(
+        sentences,
+        ["problem", "challenge", "need", "important", "however", "despite", "lack", "gap", "because", "question"],
+        default_index=0,
+    )
+    method = pick_sentence(
+        sentences,
+        [
+            "we develop",
+            "we design",
+            "we build",
+            "we propose",
+            "we use",
+            "machine learning",
+            "deep learning",
+            "model",
+            "algorithm",
+            "framework",
+            "artifact",
+            "decision support",
+        ],
+        default_index=1,
+        exclude={background},
+    )
+    contribution = pick_sentence(
+        sentences,
+        ["contribute", "show", "find", "demonstrate", "evaluate", "results", "evidence", "implication"],
+        default_index=2,
+        exclude={background, method},
+    )
+    summary = " ".join(unique_sentences([background, method, contribution]))
+    if not summary:
+        summary = first_sentences(abstract, max_sentences=3)
+    return trim_text(summary, limit)
 
 
 def first_sentences(text: str, max_sentences: int = 2) -> str:
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    selected = [sentence.strip() for sentence in sentences if sentence.strip()][:max_sentences]
+    selected = split_sentences(text)[:max_sentences]
     return " ".join(selected)
+
+
+def split_sentences(text: str) -> list[str]:
+    return [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
+
+
+def pick_sentence(sentences: list[str], markers: list[str], default_index: int, exclude: set[str] | None = None) -> str:
+    exclude = exclude or set()
+    for sentence in sentences:
+        if sentence in exclude:
+            continue
+        lowered = sentence.lower()
+        if any(marker in lowered for marker in markers):
+            return sentence
+    if default_index < len(sentences) and sentences[default_index] not in exclude:
+        return sentences[default_index]
+    for sentence in sentences:
+        if sentence not in exclude:
+            return sentence
+    return ""
+
+
+def unique_sentences(sentences: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for sentence in sentences:
+        normalized = re.sub(r"\W+", "", sentence.lower())
+        if not sentence or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(sentence)
+    return result
+
+
+def trim_text(text: str, limit: int) -> str:
+    text = clean_text(text)
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit].rsplit(" ", 1)[0].rstrip(".,;:")
+    return clipped + "."
 
 
 def method_summary(paper: Paper) -> str:
