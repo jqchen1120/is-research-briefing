@@ -2,8 +2,8 @@ name: Daily IS Design Science Briefing
 
 on:
   schedule:
-    # 10:00 Asia/Shanghai = 02:00 UTC.
-    - cron: "0 2 * * *"
+    # 10:07 Asia/Shanghai = 02:07 UTC. Avoid the top of the hour to reduce GitHub schedule delays.
+    - cron: "7 2 * * *"
   workflow_dispatch:
 
 jobs:

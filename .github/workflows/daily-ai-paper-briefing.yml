@@ -2,8 +2,8 @@ name: Daily AI Paper Inspiration Briefing
 
 on:
   schedule:
-    # 10:30 Asia/Shanghai = 02:30 UTC.
-    - cron: "30 2 * * *"
+    # 10:37 Asia/Shanghai = 02:37 UTC. Avoid round-minute scheduling to reduce GitHub schedule delays.
+    - cron: "37 2 * * *"
   workflow_dispatch:
 
 jobs:

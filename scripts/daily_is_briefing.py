@@ -10,6 +10,7 @@ import sys
 import textwrap
 import urllib.parse
 import urllib.request
+from concurrent.futures import TimeoutError, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -33,6 +34,17 @@ SECOND_TIER_JOURNALS = [
     "Information Systems Journal",
 ]
 
+OTHER_IS_JOURNALS = [
+    "Journal of Strategic Information Systems",
+    "Information Systems Frontiers",
+    "International Journal of Information Management",
+    "Information Systems",
+    "Data Base for Advances in Information Systems",
+    "Electronic Markets",
+    "Internet Research",
+    "Government Information Quarterly",
+]
+
 DAILY_IS_QUERIES = [
     "MIS Quarterly",
     "Information Systems Research",
@@ -42,14 +54,31 @@ DAILY_IS_QUERIES = [
 IS_JOURNAL_ISSNS = [
     ("MIS Quarterly", "0276-7783"),
     ("Information Systems Research", "1047-7047"),
+    ("Management Science", "0025-1909"),
+    ("Production and Operations Management", "1059-1478"),
     ("Journal of Management Information Systems", "0742-1222"),
+    ("Journal of Operations Management", "0272-6963"),
+    ("Journal of the Association for Information Systems", "1536-9323"),
+    ("Decision Support Systems", "0167-9236"),
+    ("Information & Management", "0378-7206"),
+    ("European Journal of Information Systems", "0960-085X"),
+    ("Information Systems Journal", "1350-1917"),
+    ("Journal of Strategic Information Systems", "0963-8687"),
+    ("Information Systems Frontiers", "1387-3326"),
+    ("International Journal of Information Management", "0268-4012"),
+    ("Information Systems", "0306-4379"),
+    ("Data Base for Advances in Information Systems", "0095-0033"),
+    ("Electronic Markets", "1019-6781"),
+    ("Internet Research", "1066-2243"),
+    ("Government Information Quarterly", "0740-624X"),
 ]
 
 DSR_AI_QUERIES = [
-    "design science artificial intelligence information systems",
-    "machine learning decision support information systems",
-    "generative AI artifact information systems",
-    "algorithmic decision support design science information systems",
+    "deep learning decision support information systems",
+    "machine learning artifact design information systems",
+    "AI-enabled decision support design science information systems",
+    "predictive model decision support information systems",
+    "recommender system design science information systems",
 ]
 
 AI_ML_TERMS = [
@@ -65,6 +94,26 @@ AI_ML_TERMS = [
     "classification",
     "recommendation",
     "decision support",
+]
+
+AI_METHOD_TERMS = [
+    "machine learning",
+    "deep learning",
+    "large language model",
+    "generative ai",
+    "neural network",
+    "natural language processing",
+    "reinforcement learning",
+    "computer vision",
+    "graph neural",
+    "prediction model",
+    "predictive model",
+    "classifier",
+    "classification",
+    "recommendation",
+    "recommender",
+    "algorithmic",
+    "optimization",
 ]
 
 DSR_TERMS = [
@@ -94,6 +143,28 @@ STRICT_DSR_TERMS = [
     "design evaluation",
     "build and evaluate",
     "instantiation",
+]
+
+AI_DESIGN_TERMS = [
+    "artifact",
+    "artefact",
+    "prototype",
+    "decision support",
+    "decision aid",
+    "design science",
+    "design principle",
+    "design theory",
+    "build and evaluate",
+    "instantiation",
+    "system",
+    "tool",
+    "framework",
+    "model",
+    "method",
+    "workflow",
+    "intervention",
+    "implementation",
+    "deployment",
 ]
 
 BEHAVIORAL_TERMS = [
@@ -154,7 +225,7 @@ def is_future_date(value: str) -> bool:
     return bool(value and value[:10] > today_utc())
 
 
-def fetch_json(url: str, timeout: int = 5) -> dict:
+def fetch_json(url: str, timeout: int = 4) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "is-research-briefing/2.0"})
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -252,10 +323,29 @@ def search_openalex_issn(venue_name: str, issn: str, from_date: str, per_page: i
     return [paper for paper in papers if paper and not is_editorial(paper)]
 
 
-def search_daily_is() -> list[Paper]:
+def search_openalex_issns(journals: list[tuple[str, str]], from_date: str, per_page: int) -> list[Paper]:
     papers: list[Paper] = []
-    for venue_name, issn in IS_JOURNAL_ISSNS:
-        papers.extend(search_openalex_issn(venue_name, issn, cutoff(730), per_page=5))
+    if not journals:
+        return papers
+    max_workers = min(6, len(journals))
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        futures = [
+            executor.submit(search_openalex_issn, venue_name, issn, from_date, per_page)
+            for venue_name, issn in journals
+        ]
+        try:
+            for future in as_completed(futures, timeout=35):
+                papers.extend(future.result())
+        except TimeoutError:
+            print("OpenAlex ISSN batch timed out; continuing with completed journal results.", file=sys.stderr)
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return papers
+
+
+def search_daily_is() -> list[Paper]:
+    papers = search_openalex_issns(IS_JOURNAL_ISSNS, cutoff(730), per_page=4)
     candidates = dedupe(papers)
     filtered = filter_relevant_is(candidates)
     if filtered:
@@ -271,9 +361,7 @@ def is_editorial(paper: Paper) -> bool:
 
 
 def search_recent_high_value_dsr_ai() -> list[Paper]:
-    papers: list[Paper] = []
-    for venue_name, issn in IS_JOURNAL_ISSNS:
-        papers.extend(search_openalex_issn(venue_name, issn, years_ago(3), per_page=10))
+    papers = search_openalex_issns(IS_JOURNAL_ISSNS, years_ago(3), per_page=5)
     for query in DSR_AI_QUERIES:
         papers.extend(
             search_openalex(
@@ -284,9 +372,11 @@ def search_recent_high_value_dsr_ai() -> list[Paper]:
                 module_hint="Recent high-value DSR + AI/ML",
             )
         )
-    candidates = [paper for paper in dedupe(papers) if is_ai_or_dsr_related(paper)]
-    preferred = [paper for paper in candidates if venue_priority(paper.venue) > 0]
-    return preferred or candidates
+    return [
+        paper
+        for paper in dedupe(papers)
+        if venue_priority(paper.venue) > 0 and is_dsr_ai_method_paper(paper)
+    ]
 
 
 def filter_relevant_is(papers: list[Paper]) -> list[Paper]:
@@ -321,6 +411,17 @@ def is_ai_or_dsr_related(paper: Paper) -> bool:
     return contains_any(text, AI_ML_TERMS) or contains_any(text, STRICT_DSR_TERMS) or "decision support" in text
 
 
+def is_dsr_ai_method_paper(paper: Paper) -> bool:
+    text = paper_text(paper)
+    has_ai_method = contains_any(text, AI_METHOD_TERMS)
+    has_design_context = contains_any(text, AI_DESIGN_TERMS)
+    behavioral_only = (
+        contains_any(text, ["adoption", "acceptance", "intention", "perception", "attitude", "trust"])
+        and not contains_any(text, ["decision support", "artifact", "prototype", "system", "tool", "model"])
+    )
+    return has_ai_method and has_design_context and not behavioral_only
+
+
 def is_is_related(paper: Paper) -> bool:
     text = paper_text(paper)
     return (
@@ -337,38 +438,27 @@ def venue_priority(venue: str) -> int:
         return 4
     if any(name.lower() in lowered for name in SECOND_TIER_JOURNALS):
         return 3
+    if any(name.lower() in lowered for name in OTHER_IS_JOURNALS):
+        return 2
     return 0
-
-
-def classify_domain(paper: Paper) -> str:
-    text = paper_text(paper)
-    if contains_any(text, STRICT_DSR_TERMS):
-        return "Design Science"
-    if contains_any(text, MODELING_TERMS) or contains_any(text, AI_ML_TERMS):
-        return "Modeling"
-    if contains_any(text, BEHAVIORAL_TERMS):
-        return "Behavioral"
-    if any(term in text for term in ["data", "evidence", "estimate", "effect", "interview", "case study"]):
-        return "Empirical"
-    return "General IS"
 
 
 def keywords(paper: Paper) -> list[str]:
     text = paper_text(paper)
     candidates = {
-        "method: design science": STRICT_DSR_TERMS,
-        "method: AI/ML": AI_ML_TERMS,
-        "method: modeling": MODELING_TERMS,
-        "method: behavioral study": BEHAVIORAL_TERMS,
-        "background: decision support": ["decision support", "decision aid"],
-        "background: platform": ["platform", "ecosystem"],
-        "background: health IT": ["health", "clinical", "medical"],
-        "background: security/privacy": ["security", "privacy", "cybersecurity"],
-        "background: social media": ["social media", "online reviews", "twitter"],
-        "background: digital transformation": ["digital transformation", "digitalization"],
+        "design science": STRICT_DSR_TERMS,
+        "AI/ML": AI_ML_TERMS,
+        "modeling": MODELING_TERMS,
+        "behavioral study": BEHAVIORAL_TERMS,
+        "decision support": ["decision support", "decision aid"],
+        "platform": ["platform", "ecosystem"],
+        "health IT": ["health", "clinical", "medical"],
+        "security/privacy": ["security", "privacy", "cybersecurity"],
+        "social media": ["social media", "online reviews", "twitter"],
+        "digital transformation": ["digital transformation", "digitalization"],
     }
     tags = [label for label, terms in candidates.items() if contains_any(text, terms)]
-    return tags[:4] or ["background: information systems"]
+    return tags[:4] or ["information systems"]
 
 
 def abstract_short(paper: Paper, limit: int = 650) -> str:
@@ -434,7 +524,7 @@ def dedupe(papers: Iterable[Paper]) -> list[Paper]:
     return result
 
 
-def paper_block(paper: Paper, include_domain: bool = False, include_citations: bool = False) -> list[str]:
+def paper_block(paper: Paper, include_citations: bool = False) -> list[str]:
     lines = [
         f"### {paper.title}",
         f"- Authors: {paper.authors}",
@@ -442,8 +532,6 @@ def paper_block(paper: Paper, include_domain: bool = False, include_citations: b
         f"- Venue/source: {paper.venue or paper.source}",
         f"- Link: {paper.url or 'No link available'}",
     ]
-    if include_domain:
-        lines.append(f"- Field: {classify_domain(paper)}")
     if include_citations:
         lines.append(f"- Citation signal: {paper.cited_by_count} OpenAlex citations")
     lines.extend(
@@ -492,7 +580,7 @@ def build_markdown() -> str:
     if latest:
         lines.extend(["## 1. Latest IS Papers", ""])
         for paper in latest:
-            lines.extend(paper_block(paper, include_domain=True))
+            lines.extend(paper_block(paper))
 
     lines.extend(["## 2. Recent High-Value DSR + AI/ML Papers", ""])
     if high_value:

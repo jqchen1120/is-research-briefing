@@ -1,16 +1,16 @@
 # Daily IS Design Science Research Briefing
 
-This GitHub Actions workflow sends a daily Information Systems research briefing at 10:00 Asia/Shanghai.
+This GitHub Actions workflow sends a daily Information Systems research briefing at 10:07 Asia/Shanghai.
 
 The IS briefing is intentionally concise. Each paper includes authors, date, link, a concise abstract-style summary, and keywords.
 
 The IS briefing separates papers into:
 
-- Latest IS papers from core IS journals, with field labels such as `Design Science`, `Modeling`, `Behavioral`, `Empirical`, or `General IS`.
-- Recent high-value DSR + AI/ML papers from the last three years, prioritizing ISR, MISQ, and Management Science, then POM, JMIS, JOC, JAIS, DSS, I&M, EJIS, and ISJ.
+- Latest IS papers from core and adjacent IS journals.
+- Recent high-value DSR + AI/ML papers from the last three years, prioritizing ISR, MISQ, and Management Science, then POM, JMIS, JOC, JAIS, DSS, I&M, EJIS, ISJ, JSIS, ISF, IJIM, and other relevant IS journals. This module requires AI/DL method signals plus artifact, decision-support, design, build, or deployment signals.
 - Highlight summary after all search modules.
 
-The `Field` label is a single coarse type such as `Design Science`, `Modeling`, `Behavioral`, `Empirical`, or `General IS`. Keywords are split into method/background signals.
+Keywords are concise topic or method labels without category prefixes.
 
 ## Setup
 
@@ -32,7 +32,7 @@ For Gmail, enable 2-step verification and create an app password.
 
 ## Schedule
 
-The workflow runs at `02:00 UTC`, which is `10:00 Asia/Shanghai`.
+The workflow runs at `02:07 UTC`, which is `10:07 Asia/Shanghai`.
 
 You can also run it manually from `Actions -> Daily IS Design Science Briefing -> Run workflow`.
 
@@ -45,7 +45,7 @@ You can also run it manually from `Actions -> Daily IS Design Science Briefing -
 
 ## AI Paper Inspiration Briefing
 
-The second workflow sends a broader AI paper briefing at 10:30 Asia/Shanghai. Each paper includes authors, date, link, a concise abstract-style summary, keywords, and a quality signal. It mixes:
+The second workflow sends a broader AI paper briefing at 10:37 Asia/Shanghai. Each paper includes authors, date, link, a concise abstract-style summary, keywords, and a quality signal. It mixes:
 
 - Fresh arXiv papers, selected by topic relevance plus notable author/lab/company signals.
 - Trending recent AI papers and topics, using citation signal where available.
